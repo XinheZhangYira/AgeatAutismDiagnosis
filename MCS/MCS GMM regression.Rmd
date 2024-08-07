@@ -1,14 +1,4 @@
----
-title: "GMM group membership regression"
-author: "Yira Zhang"
-date: "2023-02-13"
-output: html_document
----
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-```{r}
 library(tidyverse)
 library(ggplot2)
 library(tidyr)
@@ -19,9 +9,10 @@ library(leaps)
 library(car)
 library(relaimpo)
 library(plyr)
-```
+
+
 ## Data
-```{r}
+
 MCS_autism <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_autism.csv") # 188 in total
 mcs2_parent_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_interview.tab")
 mcs_ID_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ID_identifier.csv")
@@ -30,24 +21,26 @@ mcs2_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diag
 mcs2_dep_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_deprivation_identifier.csv") 
 mcs2_family_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_family_derived.tab")
 mcs2_other_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_other_ses_identifier.csv")
-mcs_gmm_2_group <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_autism_gmm_group_membership.csv") # 1 = decreasing line; 2 = increasing line; prosocial is a bit tricky as two/three/four groups gave similar BIC, so went with 2-group solution to stay consistent with other subscales
+mcs_gmm_2_group <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_autism_gmm_group_membership.csv") 
+
 MCS_sdq_autism <- MCS_autism[,c(1:21,34:39,22:33,40:45)]
 MCS_sdq_autism <- subset(MCS_sdq_autism, select = -PID)
 MCS_sdq_autism$cmid <- paste(MCS_sdq_autism$MCSID, MCS_sdq_autism$CNUM, sep = "")
 
 mcs_gmm_2_group <- cbind(MCS_sdq_autism$cmid,mcs_gmm_2_group)
 names(mcs_gmm_2_group)[1] <- "cmid"
+
+
 mcs6_cm_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-8156-tab/tab/mcs6_cm_interview.tab")
 mcs6_cm_interview$cmid <- paste(mcs6_cm_interview$MCSID, mcs6_cm_interview$FCNUM00, sep = "")
+# smfq = short mood and feelings questionnaire
 mcs6_smfq <- mcs6_cm_interview %>% filter(cmid %in% MCS_sdq_autism$cmid) %>% dplyr::select(MCSID,cmid, FCMDSA00,FCMDSB00,FCMDSC00,FCMDSD00,FCMDSE00,FCMDSF00,FCMDSG00,FCMDSH00,FCMDSI00,FCMDSJ00,FCMDSK00,FCMDSL00,FCMDSM00)
 mcs6_smfq[mcs6_smfq < 0] <- NA
 mcs6_smfq[, 3:ncol(mcs6_smfq)] <- mcs6_smfq[, 3:ncol(mcs6_smfq)] - 1
 mcs_asd_smfq <- merge(mcs_gmm_2_group, mcs6_smfq, by = c("MCSID","cmid"), all = T)
 mcs_asd_smfq$smfq_ttl <- rowSums(mcs_asd_smfq[,13:25])
-```
 
 
-```{r}
 smfh_ratio <- mcs_asd_mh[!is.na(mcs_asd_smfq$smfq_ttl), ] %>% 
   group_by(ttl, Sex)%>%
   dplyr::summarize(count = n())
@@ -62,8 +55,7 @@ summary_smfq <-mcs_asd_smfq %>%
     smfq_Q1 = quantile(smfq_ttl, probs = 0.25, na.rm = TRUE),
     smfq_Q3 = quantile(smfq_ttl, probs = 0.75, na.rm = TRUE)
   )  
-# Display the summary statistics table
-print(summary_smfq)
+
 
 summary_smfq_sex <-mcs_asd_smfq %>%
   dplyr::group_by(Sex) %>%
@@ -72,7 +64,7 @@ summary_smfq_sex <-mcs_asd_smfq %>%
     smfq_Q1 = quantile(smfq_ttl, probs = 0.25, na.rm = TRUE),
     smfq_Q3 = quantile(smfq_ttl, probs = 0.75, na.rm = TRUE)
   )  
-# Display the summary statistics table
+
 print(summary_smfq_sex)
 
 summary_smfq_grp <-mcs_asd_smfq %>% group_by(ttl) %>%
@@ -117,10 +109,8 @@ smfq.diff.male <- wilcox.test(smfq_ttl ~ ttl, data = mcs_asd_smfq[mcs_asd_smfq$S
 smfq.diff.male
 smfq.diff.female <- wilcox.test(smfq_ttl ~ ttl, data = mcs_asd_smfq[mcs_asd_smfq$Sex == 2,])
 smfq.diff.female
-```
 
-
-```{r}
+# identify measures of mental health diagnosis (if any)
 mcs7_cm_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-8682-tab/tab/mcs7_cm_interview.tab")
 mcs7_cm_interview$cmid <- paste(mcs7_cm_interview$MCSID, mcs7_cm_interview$GCNUM00, sep = "")
 mcs7_mh_condition<- mcs7_cm_interview %>% filter(cmid %in% MCS_sdq_autism$cmid) %>% dplyr::select(MCSID, cmid,GCDEAN00,GCCLSM0G,GCCLSM0O,GCPHDE00,GCPHHO00,GCPHRF00,GCPHEE00,GCPHWO00,GCPHNE00,GCSHCU00,GCSHBU00,GCSHBR00,GCSHOD00,GCSHPU00,GCSHRM00,GCSHRZ0A,
@@ -129,16 +119,12 @@ GCSHRZ0B,GCSHRZ0C,GCSHRZ0D,GCSHRZ0E,GCSHRZ0F,GCSHRZ0N,GCSHRZ0O,GCSUIC00)
 mcs7_mh_condition$GCDEAN00[mcs7_mh_condition$GCDEAN00 %in% c(3,4,5)] <- NA
 mcs7_mh_condition$GCDEAN00 <- ifelse(mcs7_mh_condition$GCDEAN00 == 2,0,1)
 mcs7_mh_condition <- mcs7_mh_condition %>% dplyr::mutate_at(vars(c("GCCLSM0G","GCCLSM0O")), ~ ifelse(. == -1, NA, .)) %>% dplyr::mutate_at(vars(c("GCPHDE00","GCPHHO00","GCPHRF00","GCPHEE00","GCPHWO00","GCPHNE00")), ~ ifelse(. %in% c(6,7,8), NA, .)) %>% dplyr::mutate_at(vars(c("GCSHCU00","GCSHBU00","GCSHBR00","GCSHOD00","GCSHPU00","GCSHRM00")), ~ifelse(. %in% c(3,4,5),NA,.)) %>% mutate_at(vars(c("GCSHRZ0A","GCSHRZ0B","GCSHRZ0C","GCSHRZ0D","GCSHRZ0E","GCSHRZ0F","GCSHRZ0N","GCSHRZ0O")), ~ ifelse(. == -1, NA, .)) %>% dplyr::mutate_at(vars("GCSUIC00"), ~ ifelse(. %in% c(3,4,5),NA,.))
-```
 
-```{r}
 sex_ratio_diag_age <- mcs_gmm_2_group %>%
   group_by(diag.age, Sex) %>%
   dplyr::summarize(count = n())
 sex_ratio_diag_age
-```
 
-```{r}
 mcs_asd_mh <- merge(mcs_gmm_2_group, mcs7_mh_condition, by = c("MCSID","cmid"), all = T)
 
 mcs_asd_mh$mh <- ifelse(mcs_asd_mh$GCDEAN00 == 1|mcs_asd_mh$GCCLSM0G == 1, 1, 0)
@@ -171,7 +157,7 @@ mh_ratio_ttl_grp
 sui_ratio_ttl_grp <- mcs_asd_mh %>% group_by(ttl,GCSUIC00 , Sex)%>%
   dplyr::summarize(count = n())
 sui_ratio_ttl_grp
-```
+
 
 # Kessler 6
 
@@ -204,8 +190,6 @@ summary_KS_sex <-mcs_asd_mh %>%
 # Display the summary statistics table
 print(summary_KS_sex)
 
-```
-```{r}
 # Perform Mann-Whitney U test
 ks.diff <- wilcox.test(KS ~ ttl, data = mcs_asd_mh)
 ks.diff
@@ -223,11 +207,10 @@ ks.diff.male <- wilcox.test(KS ~ ttl, data = mcs_asd_mh[mcs_asd_mh$Sex == 1,])
 ks.diff.male
 ks.diff.female <- wilcox.test(KS ~ ttl, data = mcs_asd_mh[mcs_asd_mh$Sex == 2,])
 ks.diff.female
-```
 
 
 # Self-Harm
-```{r}
+
 mh_ratio_sh <- mcs_asd_mh_sh %>% 
   group_by(ttl, Sex)%>%
   dplyr::summarize(count = n())
@@ -275,8 +258,6 @@ summary_self_harm_all <-mcs_asd_mh_sh %>%
 # Display the summary statistics table
 print(summary_self_harm_all)
 
-```
-```{r}
 # Perform Mann-Whitney U test
 self_harm.diff <- wilcox.test(self_harm ~ ttl, data = mcs_asd_mh_sh)
 self_harm.diff
@@ -294,10 +275,7 @@ self_harm.diff.male <- wilcox.test(self_harm ~ ttl, data = mcs_asd_mh_sh[mcs_asd
 self_harm.diff.male
 self_harm.diff.female <- wilcox.test(self_harm ~ ttl, data = mcs_asd_mh_sh[mcs_asd_mh_sh$Sex == 2,])
 self_harm.diff.female
-```
 
-
-```{r}
 
 mcs_self_harm_mod <- glm(self_harm ~ ttl + Sex, data = mcs_asd_mh_sh, family = poisson)
 mcs_self_harm_modsum <- broom::tidy(mcs_self_harm_mod)
@@ -305,35 +283,16 @@ mcs_self_harm_mod_int <- glm(self_harm ~ ttl + Sex + ttl:Sex, data = mcs_asd_mh_
 mcs_self_harm_mod_intsum <- broom::tidy(mcs_self_harm_mod_int)
 mcs_self_harm_sum <- rbind(mcs_self_harm_modsum, mcs_self_harm_mod_intsum)
 mcs_self_harm_sum
-```
 
 
 
 
 
-```{r}
-
-sex_ratio_diag_age <- sex_ratio_diag_age %>%
-  mutate(percentage = count / sum(count) * 100)
-sex_ratio_diag_age$diag.age <- as.factor(sex_ratio_diag_age$diag.age)
-sex_ratio_diag_age$Sex <- as.factor(sex_ratio_diag_age$Sex)
-# Create the stacked bar chart using ggplot2
-ggplot(sex_ratio_diag_age, aes(x = diag.age, y = percentage, fill = Sex)) +
-  geom_col(position = "stack") +
-  labs(title = "Diagnosed Autism by Age Group and Sex",
-       x = "diagnosis age",
-       y = "percentage",
-       fill = "Sex") +
- scale_fill_manual(values = c("1" = "blue", "2" = "pink"), 
-                    labels = c("Male", "Female"),
-                    guide = guide_legend(title = "Sex")) 
-```
 
 
 
 
 
-```{r}
 mcs_autism_IQ <- mcs_ID_identifier[mcs_ID_identifier$mcs_cog_pca.MCSID %in% MCS_sdq_autism$MCSID, ]
 mcs_autism_IQ <- mcs_autism_IQ[,2:6]
 colnames(mcs_autism_IQ) <- c("MCSID","CNUM00","CMID","PC1","ID")
