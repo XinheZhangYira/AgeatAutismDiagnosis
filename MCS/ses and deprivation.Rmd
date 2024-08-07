@@ -1,41 +1,32 @@
----
-title: "MCS other predictors"
-author: "Yira Zhang"
-date: "2023-02-03"
-output: html_document
----
+## This Rmd is to identify measure of socio-economic status, regional deprivation, and conduct PCA for dimension reduction.
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+# According to PCA screening, no autistic children were labelled as intellectual disability, the PC score of the first component (PC1 score) was used as the TIP.
 
-## Predictors for linear growth models 
-There are time-varying predictors (TVP) and time-invariant predictors (TIP. This Rmd is to filter potential predictors for the lgms.
-Current predictors include sex, ethnicity, mother's highest educational attainment, deprivation, and intellectual disability/intelligence.
 
-As according to PCA screening, no autistic children were labelled as intellectual disability, the PC score of the first component (PC1 score) was used as the TIP.
-
-```{r}
 library(readr)
 library(tidyr)
 library(tidyverse)
 library(corrplot)
-```
+
 
 ## Ethnicity
-```{r}
+
 mcs1_cm_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-4683-tab/tab/mcs1_cm_derived.tab")
 mcs1_parent_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-4683-tab/tab/mcs1_parent_derived.tab")
 mcs2_parent_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_interview.tab")
 mcs2_family_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_family_derived.tab")
 
+===================
+# Imputed data (re.imputation.Rmd)
 mcs_imp <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/sftimp_data.csv")
 mcs_imp <- mcs_imp[-1]
 names(mcs_imp)[1] <- "CMID"
-```
+===================
 
-```{r}
+
 mcs1_ethnicity <- dplyr::select(mcs1_cm_derived, MCSID, ACNUM00, ADC06E00, ADC11E00, ADC08E00)
+
+# Maternal age at delivery
 mcs1_birth_age <- mcs1_parent_derived[mcs1_parent_derived$ADDRES00 == 1,] %>%  dplyr::select(MCSID, ADDAGB00, ADDGAB00)
 mcs1_birth_age <- mcs1_birth_age[which(mcs1_birth_age$ADDAGB00 >= 0),]
 
@@ -50,10 +41,10 @@ mcs_imp$MCSID <- substr(mcs_imp$CMID, 1, nchar(mcs_imp$CMID) - 1)
 
 imp_other_tip <- mcs_imp[, names(mcs_imp) %in% names(mcs2_other_tip)]
 mcs_imp_other_tip <- rbind(mcs2_other_tip, imp_other_tip) %>% unique()
-```
 
 
-```{r}
+
+
 mcs2_tip <- merge(mcs2_primary_qual, mcs2_other_tip, by = "MCSID")
 mcs2_tip[, 4] = 6 - mcs2_tip[, 4]
 colnames(mcs2_tip) <-  c("MCSID","HighestEduQual","HighestVocQual","IncomeQuant","LabourMrtSts","OECDPov","HouseTen")
@@ -89,15 +80,16 @@ corrplot_other_imp <- corrplot.mixed(cor(mcs2_other_tip_pca_imp, use = "complete
                             addCoefasPercent = TRUE,
                             number.cex=0.8)
 
-
-```
-```{r}
 pc_ses <- prcomp(mcs2_tip_pca, center = TRUE, scale = TRUE)
 summary_pc_ses <- summary(pc_ses)
 pca_ses_summary <- as.data.frame(summary_pc_ses$importance) # PC1(proportion of variance) = 0.518060
 view(pc_ses$rotation)
 ses_pc_score <- as.data.frame(summary_pc_ses$x)
 mcs_ses_pca_score <- cbind(mcs2_tip$MCSID, ses_pc_score)
+# due to low repsonse rate, parental educational background were removed from the SES measures,specified as _other_ses below.
+
+
+
 
 pc_other_ses <- prcomp(mcs2_other_tip_pca, center = TRUE, scale = TRUE)
 summary_pc_other_ses <- summary(pc_other_ses) # PC1(Proportion of variance) = 0.665180
@@ -105,6 +97,7 @@ mcs_pca_other_ses_summary <- as.data.frame(summary_pc_other_ses$importance)
 view(pc_other_ses$rotation)
 other_ses_pc_score <- as.data.frame(summary_pc_other_ses$x)
 mcs_other_ses_pca_score <- cbind(mcs2_other_tip$MCSID, other_ses_pc_score)
+
 
 pc_other_ses_imp <- prcomp(mcs2_other_tip_pca_imp, center = TRUE, scale = TRUE)
 summary_pc_other_imp <- summary(pc_other_ses_imp) # PC1(Proportion of variance) = 0.665180
@@ -115,39 +108,34 @@ names(mcs_other_ses_pca_score_imp)[1]<- "MCSID"
 imp_ses <- mcs_other_ses_pca_score_imp[,1:2]
 imp_asd_ses <- imp_ses[imp_ses$MCSID %in% mcs_imp$MCSID,] %>% unique()
 names(imp_asd_ses)[2] <- "ses"
-```
 
-```{r}
+
+
 mcs1_tip <- merge(mcs1_ethnicity, mcs1_birth_age, by = "MCSID")
 mcs2_ses_identifier <- cbind(mcs2_tip, mcs_ses_pca_score)
 write.csv(mcs1_tip, file = "/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_race_mbirthage.csv")
 write.csv(mcs2_ses_identifier, file = "/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ses_identifier.csv")
 
-```
-```{r}
+
 
 mcs2_other_ses_identifier <- cbind(mcs2_other_tip, mcs_other_ses_pca_score)
 write.csv(mcs2_other_ses_identifier, file = "/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_other_ses_identifier.csv")
 
-```
 
 
 
 
 
 ## Deprivation from geographically linked data
-```{r}
-mcs2_geo <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_geographically_linked_data.tab")
-```
 
-```{r}
+mcs2_geo <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_geographically_linked_data.tab")
+
 mcs2_england <- mcs2_geo %>% filter(bactry00 == "1")
 mcs2_wales   <- mcs2_geo %>% filter(bactry00 == "2")
 mcs2_scotland<- mcs2_geo %>% filter(bactry00 == "3")
 mcs2_norire  <- mcs2_geo %>% filter(bactry00 == "4")
-```
 
-```{r}
+
 mcs2_england_dep <- dplyr::select(mcs2_england, mcsid, bactry00, BIMDSCOE,BIMDINCE,BIMDEMPE,BIMDHDDE,BIMDESTE) 
 colnames(mcs2_england_dep) <- c("MCSID","ccountry","Overall","Income","Employment","HealthDisability","EduSkillTrain")
 mcs2_wales_dep <- dplyr::select(mcs2_wales, mcsid, bactry00, BIWIMDSC,BIWIMDIN,BIWIMDEM,BIWIMDHD,BIWIMDES)
@@ -156,9 +144,7 @@ mcs2_scotland_dep <- dplyr::select(mcs2_scotland, mcsid, bactry00, BISIMDSC,BISI
 colnames(mcs2_scotland_dep) <- c("MCSID","ccountry","Overall","Income","Employment","HealthDisability","EduSkillTrain")
 mcs2_norire_dep <- dplyr::select(mcs2_norire, mcsid, bactry00, BIMDSCON, BIMDINCN,BIMDEMPN,BIMDHDDN,BIMDESTN)
 colnames(mcs2_norire_dep) <- c("MCSID","ccountry","Overall","Income","Employment","HealthDisability","EduSkillTrain")
-```
 
-```{r}
 mcs2_dep <- rbind(mcs2_england_dep, mcs2_wales_dep, mcs2_scotland_dep, mcs2_norire_dep) 
 mcs2_dep <- subset(mcs2_dep,MCSID != "M12575F")
 
@@ -177,6 +163,9 @@ corrplot_dep <- corrplot.mixed(cor(mcs2_dep_pca, use = "complete.obs"), upper = 
                             tl.cex = 0.8,
                             addCoefasPercent = TRUE,
                             number.cex=0.8)
+
+
+
 mcs2_dep_pca_imp <- mcs_imp_dep[,3:7] 
 mcs2_dep_pca_imp <- as.data.frame(lapply(mcs2_dep_pca_imp, as.numeric)) %>% na.omit
 cor(mcs2_dep_pca_imp, use = "complete.obs")
@@ -187,10 +176,8 @@ corrplot_dep_imp <- corrplot.mixed(cor(mcs2_dep_pca_imp, use = "complete.obs"), 
                             tl.cex = 0.8,
                             addCoefasPercent = TRUE,
                             number.cex=0.8)
-```
 
 
-```{r}
 pc_dep <-prcomp(mcs2_dep_pca[,2:5], center = TRUE, scale = TRUE)
 summary_pc_dep <- summary(pc_dep)
 mcs_pca_dep_summary <- as.data.frame(summary_pc_dep$importance) # PC1(proportion of variance) = 0.879940
@@ -208,11 +195,8 @@ names(mcs_dep_pca_score_imp)[1] <- "MCSID"
 imp_dep <- mcs_dep_pca_score_imp[,1:2]
 imp_asd_dep <- imp_dep[imp_dep$MCSID %in% mcs_imp$MCSID,] %>% unique()
 names(imp_asd_dep)[2]<- "dep"
-```
 
-```{r}
 mcs2_dep_identifier <- cbind(mcs2_dep, mcs_dep_pca_score)
 mcs2_dep_identifier <- mcs2_dep_identifier[,-8]
 write_csv(mcs2_dep_identifier, file = "/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_deprivation_identifier.csv")
-```
 
