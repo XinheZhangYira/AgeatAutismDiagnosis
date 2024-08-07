@@ -1,0 +1,1741 @@
+MCS_autism <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_autism.csv")
+
+
+library(readr)
+library(tidyverse)
+library(naniar)
+library(fastDummies)
+library(reshape)
+library(data.table)
+library(lavaan)
+library(lcmm)
+library(tidySEM)
+
+## Load data
+
+mcs2_parent_cm <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_cm_interview.tab", show_col_types = FALSE)
+mcs2_parent_cm$cmid <- paste(mcs2_parent_cm$MCSID,mcs2_parent_cm$BCNUM00, sep = "")
+
+mcs3_parent_cm <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5795-tab/tab/mcs3_parent_cm_interview.tab", show_col_types = FALSE)
+mcs3_parent_cm$cmid <- paste(mcs3_parent_cm$MCSID,mcs3_parent_cm$CCNUM00, sep = "")
+
+mcs4_parent_cm <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-6411-tab/tab/mcs4_parent_cm_interview.tab", show_col_types = FALSE)
+mcs4_parent_cm$cmid <- paste(mcs4_parent_cm$MCSID,mcs4_parent_cm$DCNUM00, sep = "")
+
+mcs5_parent_cm <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-7464-tab/tab/mcs5_parent_cm_interview.tab", show_col_types = FALSE)
+mcs5_parent_cm$cmid <- paste(mcs5_parent_cm$MCSID,mcs5_parent_cm$ECNUM00, sep = "")
+
+mcs6_parent_cm <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-8156-tab/tab/mcs6_parent_cm_interview.tab", show_col_types = FALSE)
+mcs6_parent_cm$cmid <- paste(mcs6_parent_cm$MCSID,mcs6_parent_cm$FCNUM00, sep = "")
+
+mcs7_parent_cm <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-8682-tab/tab/mcs7_parent_cm_interview.tab", show_col_types = FALSE)
+mcs7_parent_cm$cmid <- paste(mcs7_parent_cm$MCSID,mcs7_parent_cm$GCNUM00, sep = "")
+
+
+=====================================================================================
+## Identify autism diagnosis
+
+mcs3_asd <- mcs3_parent_cm %>%  dplyr::select(MCSID,cmid,CPNUM00,CPAUTS00)
+colnames(mcs3_asd)[3] <- "PNUM"
+mcs4_asd <- mcs4_parent_cm%>% dplyr::select(MCSID,cmid,DPNUM00,DPAUTS00)
+mcs4_asd$DPAUTS00[mcs4_asd$DPAUTS00 == " "] <- NA
+colnames(mcs4_asd)[3] <- "PNUM"
+mcs5_asd <- mcs5_parent_cm  %>% dplyr::select(MCSID,cmid,EPNUM00,EPAUTS00)
+colnames(mcs5_asd)[3] <- "PNUM"
+mcs6_asd <- mcs6_parent_cm  %>% dplyr::select(MCSID,cmid,FPNUM00,FPAUTS00)
+colnames(mcs6_asd)[3] <- "PNUM"
+
+
+asd_list <- list(mcs3_asd,mcs4_asd,mcs5_asd,mcs6_asd)
+asd_pattern <- unique(Reduce(function(x, y) merge(x, y, by = c('MCSID', 'cmid',"PNUM"), all = TRUE), asd_list)) %>% mutate_all(., ~ifelse(. %in% c(-1,-2,-8,-9), NA, .)) 
+
+asd_pattern$EPAUTS00 <- ifelse(asd_pattern$DPAUTS00 == 1 & is.na(asd_pattern$EPAUTS00), 1, asd_pattern$EPAUTS00)
+asd_pattern$FPAUTS00 <- ifelse(asd_pattern$EPAUTS00 == 1 & is.na(asd_pattern$FPAUTS00), 1, asd_pattern$FPAUTS00)
+
+asd_pattern$pattern <- paste(asd_pattern$CPAUTS00,asd_pattern$DPAUTS00,asd_pattern$EPAUTS00,asd_pattern$FPAUTS00, sep = "-")
+# as in sweep5 (Exxxx) and sweep6 (Fxxxx), autism diagnosis was not asked to those who recieved diagnosis, here we automatically add 1 if they reported diagnoses in the prior sweep
+mcs_asd <- asd_pattern[grepl("1", asd_pattern$pattern) > 0, ]
+
+
+
+
+
+# **Expanded** sample: Loosest version:no limit on #NA or consecutive reports 
+complete_asd_loose <- mcs_asd %>%
+  mutate(
+    num_diag = rowSums(dplyr::select(.,ends_with("AUTS00")) == 1, na.rm = TRUE),
+    num_na = rowSums(is.na(dplyr::select(., ends_with("AUTS00")))))
+
+asd_sample_loose <- complete_asd_loose %>% 
+  dplyr::arrange(cmid, desc(num_diag), num_na) %>%
+  group_by(cmid) %>% slice(1) %>% 
+  ungroup() %>% 
+  dplyr::select(-num_diag, - num_na)  
+
+# Create a column for the position of the first one
+asd_sample_diag_loose <- asd_sample_loose %>%
+  mutate(first_one = sapply(strsplit(pattern, "-"), function(x) which(x == "1")[1])) %>%
+  mutate(diag.age = case_when(
+    first_one == 1 ~ 5,
+    first_one == 2 ~ 7,
+    first_one == 3 ~ 11,
+    first_one == 4 ~ 14
+  ))
+
+# Create a column to identify if it has at least two consecutive 1's
+asd_sample_diag_loose <- asd_sample_diag_loose %>%
+  mutate(cons.diag = as.integer(grepl("1-1", pattern))) # N = 623
+# table(asd_sample_diag_loose_cons$diag.age) 
+# N5:7:11:14 = 88:127:209:154 ~ 1:1.44:2.38:1.75
+table(asd_sample_diag_loose$diag.age)  # N 5:7:11:14 = 131:127:211:154
+
+
+================================================================================
+
+
+mcs1_cm_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-4683-tab/tab/mcs1_cm_derived.tab", show_col_types = F)
+mcs1_cm_derived$cmid <- paste(mcs1_cm_derived$MCSID, mcs1_cm_derived$ACNUM00, sep = "")
+mcs1_hhgrid <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-4683-tab/tab/mcs1_hhgrid.tab", show_col_types = FALSE)
+mcs1_hhgrid$cmid <- paste(mcs1_hhgrid$MCSID, mcs1_hhgrid$ACNUM00, sep = "")
+mcs1_parent_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-4683-tab/tab/mcs1_parent_derived.tab", show_col_types = FALSE)
+
+mcs2_hhgrid <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_hhgrid.tab", show_col_types = FALSE)
+mcs2_hhgrid$cmid <- paste(mcs2_hhgrid$MCSID, mcs2_hhgrid$BCNUM00, sep = "")
+mcs2_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_cm_cognitive_assessment.tab", show_col_types = FALSE)
+mcs2_cog$cmid <- paste(mcs2_cog$MCSID,mcs2_cog$BCNUM00, sep = "")
+mcs2_cm_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_cm_derived.tab", show_col_types = FALSE)
+mcs2_cm_derived$cmid <- paste(mcs2_cm_derived$MCSID,mcs2_cm_derived$BCNUM00, sep = "")
+mcs2_parent_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_interview.tab",show_col_types = FALSE)
+mcs2_family_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_family_derived.tab", show_col_types = FALSE)
+mcs2_geo <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_geographically_linked_data.tab",show_col_types = FALSE)
+mcs2_neighb <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_neighbourhood_observations.tab", show_col_types = F)
+mcs2_parent_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_derived.tab", show_col_types = FALSE)
+
+mcs3_cm_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5795-tab/tab/mcs3_cm_derived.tab", show_col_types = FALSE)
+mcs3_cm_derived$cmid <- paste(mcs3_cm_derived$MCSID,mcs3_cm_derived$CCNUM00, sep = "")
+mcs3_parent_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5795-tab/tab/mcs3_parent_derived.tab", show_col_types = FALSE)
+
+mcs4_cm_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-6411-tab/tab/mcs4_cm_derived.tab", show_col_types = FALSE)
+mcs4_cm_derived$cmid <- paste(mcs4_cm_derived$MCSID,mcs4_cm_derived$DCNUM00, sep = "")
+
+mcs5_cm_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-7464-tab/tab/mcs5_cm_derived.tab", show_col_types = FALSE)
+mcs5_cm_derived$cmid <- paste(mcs5_cm_derived$MCSID,mcs5_cm_derived$ECNUM00, sep = "")
+mcs5_cm_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-7464-tab/tab/mcs5_cm_interview.tab", show_col_types = FALSE)
+mcs5_cm_interview$cmid <- paste(mcs5_cm_interview$MCSID,mcs5_cm_interview$ECNUM00, sep = "")
+
+mcs6_cm_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-8156-tab/tab/mcs6_cm_derived.tab", show_col_types = FALSE)
+mcs6_cm_derived$cmid <- paste(mcs6_cm_derived$MCSID,mcs6_cm_derived$FCNUM00, sep = "")
+
+mcs7_cm_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-8682-tab/tab/mcs7_cm_derived.tab", show_col_types = FALSE)
+mcs7_cm_derived$cmid <- paste(mcs7_cm_derived$MCSID,mcs7_cm_derived$GCNUM00, sep = "")
+
+
+
+
+
+# Demographics 
+## Sex
+
+
+mcs1_sex <- mcs1_hhgrid %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% dplyr::select(MCSID, cmid,AHCSEX00)
+mcs2_sex <- mcs2_hhgrid %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% dplyr::select(MCSID, cmid,BHCSEX00)
+
+mcs_sex <- merge(mcs1_sex,mcs2_sex, by = c("MCSID","cmid"), all = T)
+
+mcs_sex$sex <- ifelse(!is.na(mcs_sex$AHCSEX00) & !is.na(mcs_sex$BHCSEX00),ifelse(mcs_sex$AHCSEX00 == mcs_sex$BHCSEX00, mcs_sex$AHCSEX00, -9),ifelse(!is.na(mcs_sex$AHCSEX00), mcs_sex$AHCSEX00,mcs_sex$BHCSEX00))
+table(mcs_sex$sex) # M480,F143
+
+
+## Maternal age at delivery
+
+mcs1_birth_age <- mcs1_parent_derived %>% filter(MCSID %in% mcs_sex$MCSID & ADDRES00 == 1)  %>% dplyr::select(MCSID, ADDAGB00, ADDGAB00) 
+#names(mcs1_birth_age) <- c("MCSID","MAD","MAD_grp")
+
+mcs2_birth_age <- mcs2_parent_derived %>% filter(MCSID %in% mcs_sex$MCSID & BDDRES00 == 1)  %>% dplyr::select(MCSID, BDDAGB00, BDDGAB00)
+#names(mcs2_birth_age) <- c("MCSID","MAD","MAD_grp")
+mcs_birth_age <- merge(mcs1_birth_age,mcs2_birth_age,  all = T)
+mcs_birth_age[mcs_birth_age <0]<- NA
+mcs_birth_age$mad <-  coalesce(mcs_birth_age$ADDGAB00,mcs_birth_age$BDDGAB00)
+# Natural mother, age at birth of CM
+
+
+
+## Ethnicity
+
+mcs1_eth <- mcs1_cm_derived %>% filter(cmid %in% mcs_sex$cmid) %>%
+  dplyr::select(MCSID, cmid, ADC06E00)
+mcs2_eth <- mcs2_cm_derived %>% filter(cmid %in% mcs_sex$cmid) %>% dplyr::select(MCSID, cmid, BDC06E00)
+mcs3_eth <- mcs3_cm_derived %>% filter(cmid %in% mcs_sex$cmid) %>% dplyr::select(MCSID, cmid, CDC06E00)
+mcs_eth <- merge(mcs1_eth, merge(mcs2_eth, mcs3_eth, by = c("MCSID","cmid"), all = T),by = c("MCSID","cmid"), all = T)
+mcs_eth[mcs_eth < 0] <- NA
+
+mcs_eth$eth <-  coalesce(mcs_eth$ADC06E00, mcs_eth$BDC06E00, mcs_eth$CDC06E00)
+ # 618 available ethnicity
+table(mcs_eth$eth) # 1White=550; 2Mixed = 19; 3Indian = 3; 4Pakistani and Bangladeshi= 18; 5Black or Black British= 20; 6Other Ethnic group (inc Chinese,Other)= 8 
+mcs_eth_mad <- merge(mcs_eth, mcs_birth_age, by = "MCSID", all = T)
+
+
+
+## Other tips
+# socio-economic status (pca), maternal age at delivery,iq (pca), deprivation(pca)
+
+mcs_ses <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_other_ses_identifier.csv")
+mcs_asd_ses <- mcs_ses%>% filter(MCSID %in% asd_sample_diag_loose$MCSID) %>% select(MCSID,BOECDSC0,BDCWRK00,	BDOEDP00,	BDROOW00,PC1)
+colnames(mcs_asd_ses) <- c("MCSID","BOECDSC0","BDCWRK00","BDOEDP00","BDROOW00","ses_PC1")
+mcs_iq <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ID_identifier.csv")
+mcs_iq <- mcs_iq[,-1]
+colnames(mcs_iq) <- c("MCSID","BCNUM00","cmid","IQ_PC1","ID")
+mcs_iq$cmid <- paste(mcs_iq$MCSID, mcs_iq$BCNUM00, sep = "")
+mcs_asd_iq <- mcs_iq %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% select(cmid,IQ_PC1)
+
+mcs_dep <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_deprivation_identifier.csv")
+mcs_asd_dep <- mcs_dep%>% filter(MCSID %in% asd_sample_diag_loose$MCSID) %>% select(MCSID,ccountry,Overall,Income,Employment,HealthDisability,EduSkillTrain,PC1)
+colnames(mcs_asd_dep) <- c("MCSID","ccountry","Overall","Income","Employment","HealthDisability","EduSkillTrain","dep_PC1")
+
+
+
+
+# add raw score (summary score) of cognitive assessments
+
+mcs2_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_cm_cognitive_assessment.tab")
+mcs2_cog$cmid <- paste(mcs2_cog$MCSID,mcs2_cog$BCNUM00, sep = "")
+mcs2_asd_loose_cog <- mcs2_cog %>% filter(cmid %in% asd_sample_diag_loose$cmid)
+mcs3_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5795-tab/tab/mcs3_cm_cognitive_assessment.tab")
+mcs3_cog$cmid <- paste(mcs3_cog$MCSID,mcs3_cog$CCNUM00, sep = "")
+mcs3_asd_loose_cog <- mcs3_cog %>% filter(cmid %in% asd_sample_diag_loose$cmid)
+mcs4_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-6411-tab/tab/mcs4_cm_cognitive_assessment.tab")
+mcs4_cog$cmid <- paste(mcs4_cog$MCSID,mcs4_cog$DCNUM00, sep = "")
+mcs4_asd_loose_cog <- mcs4_cog %>% filter(cmid %in% asd_sample_diag_loose$cmid)
+mcs5_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-7464-tab/tab/mcs5_cm_cognitive_assessment.tab")
+mcs5_cog$cmid <- paste(mcs5_cog$MCSID,mcs5_cog$ECNUM00, sep = "")
+mcs5_asd_loose_cog <- mcs5_cog %>% filter(cmid %in% asd_sample_diag_loose$cmid)
+
+
+# all used ability score or composit standard score/age standardised score when ability score is not available 
+mcs2_cog_sum <- dplyr::select(mcs2_asd_loose_cog, cmid,BDSRCS00,BDBASA00) %>% mutate_all(~ifelse(. < 0 | . == "", NA, .))
+
+mcs3_cog_sum <- dplyr::select(mcs3_asd_loose_cog,cmid,CCNVABIL,CCPCABIL,CCPSABIL) %>% mutate_all(~ifelse(. < 0 | . == "", NA, .))
+                          
+mcs4_cog_sum <- dplyr::select(mcs4_asd_loose_cog,cmid,DCPCAB00,DCWRAB00,DCMATHS7SA)%>% mutate_all(~ifelse(. < 0 | . == "", NA, .))
+ 
+mcs5_cog_sum <- dplyr::select(mcs5_asd_loose_cog, cmid,ECDTOT00) %>% mutate_all(~ifelse(. < 0 | . == "", NA, .))
+                              
+
+cog_list <- list(mcs2_cog_sum, mcs3_cog_sum, mcs4_cog_sum, mcs5_cog_sum)
+mcs_2_5_cog_asd <- cog_list %>% reduce(full_join, by= 'cmid')
+
+
+# add developmental milestones
+
+mcs1_devmile <- dplyr::select(mcs1_parent_cm_interview, c("cmid","AELIG00","ACSMIL00","ACSITU00","ACSTAN00","ACHAND00","ACGRAB00","ACPICK00","ACPTOY00",
+"ACWALK00","ACGIVE00","ACWAVE00","ACARMS00","ACNODS00","ACMOVE00"))
+
+mcs1_asd_devmile <- mcs1_devmile %>% filter(AELIG00 == "1") %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% filter_at(vars(-cmid, -AELIG00), all_vars( . >- 1)) 
+
+
+mcs2_devmile <- dplyr::select(mcs2_parent_cm_interview, c("cmid","BELIG00","BPDRDA00","BPCLDA00"))
+mcs2_asd_devmile <- mcs2_devmile %>% filter(BELIG00 == "1") %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% filter_at(vars(-cmid, -BELIG00),all_vars( . > -1 & . < 4))
+
+mcs3_devmile <- dplyr::select(mcs3_parent_cm_interview, c("cmid","CELIG00","CPSQCO00","CPDRSS00")) 
+mcs3_asd_devmile <- mcs3_devmile %>% filter(CELIG00 == "1") %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% filter_at(vars(-cmid, -CELIG00), all_vars(. <3 &  . > -1))
+
+mcs_asd_loose_devmile <- merge(merge(mcs1_asd_devmile,mcs2_asd_devmile, by = "cmid", all = T),mcs3_asd_devmile, by = "cmid", all = T)
+  
+ 
+mcs_asd_loose_devmile <- subset(mcs_asd_loose_devmile, select=-c(AELIG00, BELIG00, CELIG00))
+# sweep1: 1 = often; 2 = Once or Twice; 3 = Not yet
+# Sweep2: 1 = always; 2 = sometimes; 3 = never; 4 = dk
+# sweep3: 1 = yes; 2 = no; 3 = dk
+# PNUM00 == 1 to only keep main carer answer
+
+
+
+
+## Extract SDQs (parent-report) aacross sweeps
+
+mcs2_SDQ <- mcs2_cm_derived %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% dplyr::select(MCSID, cmid, BEMOTION,BCONDUCT,BHYPER,BPEER,BPROSOC,BEBDTOT) %>% mutate_all(., ~ifelse(. %in% c(-1,-2,-8,-9), NA, .)) 
+
+mcs3_SDQ <- mcs3_cm_derived %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% dplyr::select(MCSID, cmid, CEMOTION,CCONDUCT,CHYPER,CPEER,CPROSOC,CEBDTOT)%>% mutate_all(., ~ifelse(. %in% c(-1,-2,-8,-9), NA, .)) 
+
+mcs4_SDQ <- mcs4_cm_derived %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% dplyr::select(MCSID, cmid, DDEMOTION,DDCONDUCT,DDHYPER,DDPEER,DDPROSOC,DDDEBDTOT)%>% mutate_all(., ~ifelse(. %in% c(-1,-2,-8,-9), NA, .)) 
+
+mcs5_SDQ_raw <- mcs5_cm_interview %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% dplyr::select(MCSID,cmid,EPSDPF00,EPSDRO00,EPSDHS00,EPSDSR00,EPSDTT00,
+EPSDSP00,EPSDOR00,EPSDMW00,EPSDHU00,EPSDFS00,
+EPSDGF00,EPSDFB00,EPSDUD00,EPSDLC00,EPSDDC00,
+EPSDNC00,EPSDKY00,EPSDOA00,EPSDPB00,EPSDVH00,
+EPSDST00,EPSDCS00,EPSDGB00,EPSDFE00,EPSDTE00) 
+mcs5_SDQ_raw_rc <- mcs5_SDQ_raw %>% dplyr::mutate(across(EPSDPF00:EPSDTE00, ~as.numeric(case_when(
+    . == 1 ~ 0,
+    . == 2 ~ 1,
+    . == 3 ~ 2,
+    . %in% c(4,-1,-9) ~ NA
+  )))) %>% dplyr::mutate(across(c(EPSDOR00,EPSDST00,EPSDTE00,EPSDGF00,EPSDLC00), ~ 2-.))
+mcs5_SDQ <- mcs5_SDQ_raw_rc %>%
+  dplyr::mutate(
+    EEMOTION = rowSums(dplyr::select(., EPSDHS00,EPSDMW00,EPSDUD00,EPSDNC00,EPSDFE00)),
+    ECONDUCT = rowSums(dplyr::select(.,EPSDTT00,EPSDFB00,EPSDOA00,EPSDCS00,EPSDOR00)),
+    EHYPER = rowSums(dplyr::select(., EPSDRO00,EPSDFS00,EPSDDC00,EPSDST00,EPSDTE00)),
+    EPEER = rowSums(dplyr::select(.,EPSDSP00,EPSDPB00,EPSDGB00,EPSDGF00,EPSDLC00)),
+    EPROSOC = rowSums(dplyr::select(.,EPSDPF00,EPSDSR00,EPSDHU00,EPSDKY00,EPSDVH00)),
+    EEBDTOT = rowSums(across(c(EEMOTION, ECONDUCT, EHYPER, EPEER))))
+mcs5_SDQ <- mcs5_SDQ %>% dplyr::select(MCSID,cmid, EEMOTION, ECONDUCT,EHYPER,EPEER,EPROSOC,EEBDTOT)
+
+mcs6_SDQ <- mcs6_cm_derived %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% dplyr::select(MCSID, cmid, FEMOTION,FCONDUCT,FHYPER,FPEER,FPROSOC,FEBDTOT)%>% mutate_all(., ~ifelse(. %in% c(-1,-2,-8,-9), NA, .)) 
+
+mcs7_SDQ <- mcs7_cm_derived %>% filter(cmid %in% asd_sample_diag_loose$cmid) %>% dplyr::select(MCSID, cmid, GEMOTION,GCONDUCT,GHYPER,GPEER,GPROSOC,GEBDTOT)%>% mutate_all(., ~ifelse(. %in% c(-1,-2,-8,-9), NA, .)) 
+
+
+asd_loose_SDQ_list <- list(mcs2_SDQ,mcs3_SDQ,mcs4_SDQ,mcs5_SDQ,mcs6_SDQ,mcs7_SDQ)
+asd_loose_SDQ <- unique(Reduce(function(x, y) merge(x, y, by = c('MCSID', 'cmid'), all = TRUE), asd_loose_SDQ_list))
+asd_loose_SDQ_complete<- asd_loose_SDQ %>% na.omit()
+
+
+
+mcar_test(asd_loose_SDQ) # missing completely at random
+asd_loose_SDQ <- merge(mcs_sex[c(1:2,5)], asd_loose_SDQ, by = c("MCSID","cmid"))
+asd_loose_SDQ <- asd_loose_SDQ[rowSums(is.na(asd_loose_SDQ[, 4:39])) < 35, ] # remove all NA rows
+asd_loose_SDQ <- merge(asd_loose_SDQ, asd_sample_diag_loose[c(1:2,10)],  by = c("MCSID","cmid")) %>% dplyr::mutate(group = case_when(
+  diag.age %in% c(5,7,11) ~ "Early",
+  diag.age == 14 ~ "Late"
+))
+
+
+=========================== This is the MCS expanded sample =====================================
+## MCS expanded analysis
+
+asd_loose_SDQ_complete <- merge(mcs_sex[c(1:2,5)], asd_loose_SDQ_complete,  by = c("MCSID","cmid"), all.x = F, all.y = T)
+asd_loose_SDQ_complete <- merge(asd_loose_SDQ_complete, asd_sample_diag_loose[c(1:2,10)],  by = c("MCSID","cmid")) %>% dplyr::mutate(group = case_when(
+  diag.age %in% c(5,7,11) ~ "Early",
+  diag.age == 14 ~ "Late"
+))
+
+
+sex_ratio_diag_age <- asd_loose_SDQ_complete %>%
+  group_by(diag.age, sex) %>%
+  dplyr::summarize(count = n())
+sex_ratio_diag_age
+
+
+
+
+## LGCM
+# Analysis for no diagnosis group is the same in MCS, thus omitted from this script.
+
+
+## Total
+
+mcs_loose_complete_agestr_ttl <- "
+int =~ 1*BEBDTOT + 1*CEBDTOT + 1*DDDEBDTOT + 1*EEBDTOT + 1*FEBDTOT + 1*GEBDTOT
+slp =~ 3*BEBDTOT + 5*CEBDTOT + 7*DDDEBDTOT + 11*EEBDTOT + 14*FEBDTOT + 17*GEBDTOT
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+loose_com_ttl_fit <- growth(mcs_loose_complete_agestr_ttl, data = asd_loose_SDQ_complete,  missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_agestr_ttl <- growth(mcs_loose_complete_agestr_ttl, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_agestr_ttl_no_diag <- growth(mcs_loose_complete_agestr_ttl, data =MCS_no_diag_sdq_ttl ,  missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_agestr_ttl_no_diag)
+fit_mcs_loose_complete_sexstr_ttl <- growth(mcs_loose_complete_agestr_ttl, data = asd_loose_SDQ_complete, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_complete_agestr_ttl)
+
+mcsb_ttl_anova_sex <- anova(loose_com_ttl_fit,fit_mcs_loose_complete_sexstr_ttl)
+mcsb_ttl_anova_age <- anova(loose_com_ttl_fit,fit_mcs_loose_complete_agestr_ttl)
+
+
+
+## Emotional Symptoms
+mcs_loose_complete_agestr_emo <- "
+int =~ 1*BEMOTION + 1*CEMOTION + 1*DDEMOTION + 1*EEMOTION + 1*FEMOTION + 1*GEMOTION
+slp =~ 3*BEMOTION + 5*CEMOTION + 7*DDEMOTION + 11*EEMOTION + 14*FEMOTION + 17*GEMOTION
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+loose_com_emo_fit <- growth(mcs_loose_complete_agestr_emo, data = asd_loose_SDQ_complete,  missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_agestr_emo <- growth(mcs_loose_complete_agestr_emo, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_sexstr_emo <- growth(mcs_loose_complete_agestr_emo, data = asd_loose_SDQ_complete, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_complete_agestr_emo)
+
+mcsb_emo_anova_sex <- anova(loose_com_emo_fit,fit_mcs_loose_complete_sexstr_emo)
+mcsb_emo_anova_age <- anova(loose_com_emo_fit,fit_mcs_loose_complete_agestr_emo)
+
+
+
+## Conduct Problems
+mcs_loose_complete_agestr_con <- "
+int =~ 1*BCONDUCT + 1*CCONDUCT + 1*DDCONDUCT + 1*ECONDUCT + 1*FCONDUCT + 1*GCONDUCT
+slp =~ 3*BCONDUCT + 5*CCONDUCT + 7*DDCONDUCT + 11*ECONDUCT + 14*FCONDUCT + 17*GCONDUCT
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+loose_com_con_fit <- growth(mcs_loose_complete_agestr_con, data = asd_loose_SDQ_complete,  missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_agestr_con <- growth(mcs_loose_complete_agestr_con, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_sexstr_con <- growth(mcs_loose_complete_agestr_con, data = asd_loose_SDQ_complete, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_complete_agestr_con)
+
+mcsb_con_anova_sex <- anova(loose_com_con_fit,fit_mcs_loose_complete_sexstr_con)
+mcsb_con_anova_age <- anova(loose_com_con_fit,fit_mcs_loose_complete_agestr_con)
+
+
+
+## Hyperactivity-Inattention
+mcs_loose_complete_agestr_hyp <- "
+int =~ 1*BHYPER + 1*CHYPER + 1*DDHYPER + 1*EHYPER + 1*FHYPER + 1*GHYPER
+slp =~ 3*BHYPER + 5*CHYPER + 7*DDHYPER + 11*EHYPER + 14*FHYPER + 17*GHYPER
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+loose_com_hyp_fit <- growth(mcs_loose_complete_agestr_hyp, data = asd_loose_SDQ_complete,  missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_agestr_hyp <- growth(mcs_loose_complete_agestr_hyp, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_sexstr_hyp <- growth(mcs_loose_complete_agestr_hyp, data = asd_loose_SDQ_complete, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_complete_agestr_hyp)
+
+
+mcsb_hyp_anova_sex <- anova(loose_com_hyp_fit,fit_mcs_loose_complete_sexstr_hyp)
+mcsb_hyp_anova_age <- anova(loose_com_hyp_fit,fit_mcs_loose_complete_agestr_hyp)
+
+
+## Peer relationship problems
+mcs_loose_complete_agestr_peer <- "
+int =~ 1*BPEER + 1*CPEER + 1*DDPEER + 1*EPEER + 1*FPEER + 1*GPEER
+slp =~ 3*BPEER + 5*CPEER + 7*DDPEER + 11*EPEER + 14*FPEER + 17*GPEER
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+loose_com_peer_fit <- growth(mcs_loose_complete_agestr_peer, data = asd_loose_SDQ_complete,  missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_agestr_peer <- growth(mcs_loose_complete_agestr_peer, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_sexstr_peer <- growth(mcs_loose_complete_agestr_peer, data = asd_loose_SDQ_complete, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_complete_agestr_peer)
+
+mcsb_peer_anova_sex <- anova(loose_com_peer_fit,fit_mcs_loose_complete_sexstr_peer)
+mcsb_peer_anova_age <- anova(loose_com_peer_fit,fit_mcs_loose_complete_agestr_peer)
+
+
+
+
+## Prosocial behaviours
+mcs_loose_complete_agestr_pro <- "
+int =~ 1*BPROSOC + 1*CPROSOC + 1*DDPROSOC + 1*EPROSOC + 1*FPROSOC + 1*GPROSOC
+slp =~ 3*BPROSOC + 5*CPROSOC + 7*DDPROSOC + 11*EPROSOC + 14*FPROSOC + 17*GPROSOC
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+loose_com_pro_fit <- growth(mcs_loose_complete_agestr_pro, data = asd_loose_SDQ_complete,  missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_agestr_pro <- growth(mcs_loose_complete_agestr_pro, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_sexstr_pro <- growth(mcs_loose_complete_agestr_pro, data = asd_loose_SDQ_complete, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_complete_agestr_pro)
+
+mcsb_pro_anova_sex <- anova(loose_com_pro_fit,fit_mcs_loose_complete_sexstr_pro)
+mcsb_pro_anova_age <- anova(loose_com_pro_fit,fit_mcs_loose_complete_agestr_pro)
+
+
+### Quadratic models
+## Total
+
+mcs_loose_complete_agestr_ttl_adj_2 <- "
+int =~ 1*BEBDTOT + 1*CEBDTOT + 1*DDDEBDTOT + 1*EEBDTOT + 1*FEBDTOT + 1*GEBDTOT
+slp =~ 3*BEBDTOT + 5*CEBDTOT + 7*DDDEBDTOT + 11*EEBDTOT + 14*FEBDTOT + 17*GEBDTOT
+qua =~ 9*BEBDTOT + 25*CEBDTOT + 49*DDDEBDTOT + 121*EEBDTOT + 196*FEBDTOT + 289*GEBDTOT
+
+"
+loose_com_ttl_fit_2 <- growth(mcs_loose_complete_agestr_ttl_adj_2, data = asd_loose_SDQ_complete, missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_agestr_ttl_adj_2 <- growth(mcs_loose_complete_agestr_ttl_adj_2, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_loose_complete_sexstr_ttl_adj_2 <- growth(mcs_loose_complete_agestr_ttl_adj_2, data = asd_loose_SDQ_complete, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+
+
+
+## Subscales
+mcs_loose_complete_agestr_emo_adj_2 <- "
+int =~ 1*BEMOTION + 1*CEMOTION + 1*DDEMOTION + 1*EEMOTION + 1*FEMOTION + 1*GEMOTION
+slp =~ 3*BEMOTION + 5*CEMOTION + 7*DDEMOTION + 11*EEMOTION + 14*FEMOTION + 17*GEMOTION
+qua =~ 9*BEMOTION + 25*CEMOTION + 49*DDEMOTION + 121*EEMOTION + 196*FEMOTION + 289*GEMOTION
+
+"
+
+mcs_loose_complete_agestr_con_adj_2 <- "
+int =~ 1*BCONDUCT + 1*CCONDUCT + 1*DDCONDUCT + 1*ECONDUCT + 1*FCONDUCT + 1*GCONDUCT
+slp =~ 3*BCONDUCT + 5*CCONDUCT + 7*DDCONDUCT + 11*ECONDUCT + 14*FCONDUCT + 17*GCONDUCT
+qua =~ 9*BCONDUCT + 25*CCONDUCT + 49*DDCONDUCT + 121*ECONDUCT + 196*FCONDUCT + 289*GCONDUCT
+
+"
+
+mcs_loose_complete_agestr_hyp_adj_2 <- "
+int =~ 1*BHYPER + 1*CHYPER + 1*DDHYPER + 1*EHYPER + 1*FHYPER + 1*GHYPER
+slp =~ 3*BHYPER + 5*CHYPER + 7*DDHYPER + 11*EHYPER + 14*FHYPER + 17*GHYPER
+qua =~ 9*BHYPER + 25*CHYPER + 49*DDHYPER + 121*EHYPER + 196*FHYPER + 289*GHYPER
+
+"
+
+mcs_loose_complete_agestr_peer_adj_2 <- "
+int =~ 1*BPEER + 1*CPEER + 1*DDPEER + 1*EPEER + 1*FPEER + 1*GPEER
+slp =~ 3*BPEER + 5*CPEER + 7*DDPEER + 11*EPEER + 14*FPEER + 17*GPEER
+qua =~ 9*BPEER + 25*CPEER + 49*DDPEER + 121*EPEER + 196*FPEER + 289*GPEER
+
+"
+
+mcs_loose_complete_agestr_pro_adj_2 <- "
+int =~ 1*BPROSOC + 1*CPROSOC + 1*DDPROSOC + 1*EPROSOC + 1*FPROSOC + 1*GPROSOC
+slp =~ 3*BPROSOC + 5*CPROSOC + 7*DDPROSOC + 11*EPROSOC + 14*FPROSOC + 17*GPROSOC
+qua =~ 9*BPROSOC + 25*CPROSOC + 49*DDPROSOC + 121*EPROSOC + 196*FPROSOC + 289*GPROSOC
+
+"
+
+fit_mcs_loose_complete_agestr_emo_adj_2 <- growth(mcs_loose_complete_agestr_emo_adj_2, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_complete_agestr_emo_adj_2)
+
+
+fit_mcs_loose_complete_agestr_con_adj_2 <- growth(mcs_loose_complete_agestr_con_adj_2, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_complete_agestr_con_adj_2)
+
+
+fit_mcs_loose_complete_agestr_hyp_adj_2 <- growth(mcs_loose_complete_agestr_hyp_adj_2, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_complete_agestr_hyp_adj_2)
+
+
+fit_mcs_loose_complete_agestr_peer_adj_2 <- growth(mcs_loose_complete_agestr_peer_adj_2, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_complete_agestr_peer_adj_2)
+
+
+fit_mcs_loose_complete_agestr_pro_adj_2 <- growth(mcs_loose_complete_agestr_pro_adj_2, data = asd_loose_SDQ_complete, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_complete_agestr_pro_adj_2)
+
+
+=============================================== Mean Trajectories ============================================
+## Total
+
+# Early 
+mcs_asd_loose_complete_early <- asd_loose_SDQ_complete[asd_loose_SDQ_complete$group == "Early",]
+mcs_asd_loose_complete_late <- asd_loose_SDQ_complete[asd_loose_SDQ_complete$group == "Late",]
+mcs_asd_loose_complete_early_ttl <- mcs_asd_loose_complete_early[,c(2,3,9,15,21,27,33,39)]
+
+mcs_asd_loose_complete_early_ttl_long <- data.table::melt(setDT(mcs_asd_loose_complete_early_ttl), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_early_ttl_summary <- mcs_asd_loose_complete_early_ttl_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    ttl_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_early_ttl_summary$group <- "early"
+
+# Late
+
+mcs_asd_loose_complete_late_ttl <- mcs_asd_loose_complete_late[,c(2,3,9,15,21,27,33,39)]
+
+mcs_asd_loose_complete_late_ttl_long <- melt(setDT(mcs_asd_loose_complete_late_ttl), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_late_ttl_summary <- mcs_asd_loose_complete_late_ttl_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    ttl_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_late_ttl_summary$group <- "late"
+
+
+
+mcs_asd_loose_complete_early_ttl_summary$lb = mcs_asd_loose_complete_early_ttl_summary$ttl_mean - 1.96*mcs_asd_loose_complete_early_ttl_summary$se
+mcs_asd_loose_complete_early_ttl_summary$ub = mcs_asd_loose_complete_early_ttl_summary$ttl_mean + 1.96*mcs_asd_loose_complete_early_ttl_summary$se
+mcs_asd_loose_complete_late_ttl_summary$lb = mcs_asd_loose_complete_late_ttl_summary$ttl_mean - 1.96*mcs_asd_loose_complete_late_ttl_summary$se
+mcs_asd_loose_complete_late_ttl_summary$ub = mcs_asd_loose_complete_late_ttl_summary$ttl_mean + 1.96*mcs_asd_loose_complete_late_ttl_summary$se
+MCS_no_diag_ttl_summary$lb = 
+  MCS_no_diag_ttl_summary$ttl_mean - 
+  1.96*MCS_no_diag_ttl_summary$se
+MCS_no_diag_ttl_summary$ub = 
+  MCS_no_diag_ttl_summary$ttl_mean + 
+  1.96*MCS_no_diag_ttl_summary$se
+mcs_loose_complete_sdq_total_mean_full <- rbind(mcs_asd_loose_complete_early_ttl_summary, mcs_asd_loose_complete_late_ttl_summary,MCS_no_diag_ttl_summary)
+mcs_loose_complete_sdq_total_mean_full <- mcs_loose_complete_sdq_total_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BEBDTOT" ~ 3,
+  sweep == "CEBDTOT" ~ 5,
+  sweep == "DDDEBDTOT" ~ 7,
+   sweep == "EEBDTOT" ~ 11,
+   sweep == "FEBDTOT" ~ 14,
+   sweep == "GEBDTOT" ~ 17,
+))
+
+
+
+## Emotional Symptoms
+
+# Early 
+mcs_asd_loose_complete_early_emo <- mcs_asd_loose_complete_early[,c(2,3,4,10,16,22,28,34)]
+
+mcs_asd_loose_complete_early_emo_long <- data.table::melt(setDT(mcs_asd_loose_complete_early_emo), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_early_emo_summary <- mcs_asd_loose_complete_early_emo_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    emo_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_early_emo_summary$group <- "early"
+
+# Late
+
+mcs_asd_loose_complete_late_emo <- mcs_asd_loose_complete_late[,c(2,3,4,10,16,22,28,34)]
+
+mcs_asd_loose_complete_late_emo_long <- melt(setDT(mcs_asd_loose_complete_late_emo), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_late_emo_summary <- mcs_asd_loose_complete_late_emo_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    emo_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_late_emo_summary$group <- "late"
+
+
+mcs_asd_loose_complete_early_emo_summary$lb = mcs_asd_loose_complete_early_emo_summary$emo_mean - 1.96*mcs_asd_loose_complete_early_emo_summary$se
+mcs_asd_loose_complete_early_emo_summary$ub = mcs_asd_loose_complete_early_emo_summary$emo_mean + 1.96*mcs_asd_loose_complete_early_emo_summary$se
+mcs_asd_loose_complete_late_emo_summary$lb = mcs_asd_loose_complete_late_emo_summary$emo_mean - 1.96*mcs_asd_loose_complete_late_emo_summary$se
+mcs_asd_loose_complete_late_emo_summary$ub = mcs_asd_loose_complete_late_emo_summary$emo_mean + 1.96*mcs_asd_loose_complete_late_emo_summary$se
+MCS_no_diag_emo_summary$lb = 
+  MCS_no_diag_emo_summary$emo_mean - 
+  1.96*MCS_no_diag_emo_summary$se
+MCS_no_diag_emo_summary$ub = 
+  MCS_no_diag_emo_summary$emo_mean + 
+  1.96*MCS_no_diag_emo_summary$se
+mcs_loose_complete_sdq_emo_mean_full <- rbind(mcs_asd_loose_complete_early_emo_summary, mcs_asd_loose_complete_late_emo_summary,MCS_no_diag_emo_summary)
+mcs_loose_complete_sdq_emo_mean_full <- mcs_loose_complete_sdq_emo_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BEMOTION" ~ 3,
+  sweep == "CEMOTION" ~ 5,
+  sweep == "DDEMOTION" ~ 7,
+   sweep == "EEMOTION" ~ 11,
+   sweep == "FEMOTION" ~ 14,
+   sweep == "GEMOTION" ~ 17,
+))
+
+
+## Conduct Problems
+# Early 
+mcs_asd_loose_complete_early_con <- mcs_asd_loose_complete_early[,c(2,3,5,11,17,23,29,35)]
+
+mcs_asd_loose_complete_early_con_long <- data.table::melt(setDT(mcs_asd_loose_complete_early_con), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_early_con_summary <- mcs_asd_loose_complete_early_con_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    con_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_early_con_summary$group <- "early"
+
+# Late
+
+mcs_asd_loose_complete_late_con <- mcs_asd_loose_complete_late[,c(2,3,5,11,17,23,29,35)]
+
+mcs_asd_loose_complete_late_con_long <- melt(setDT(mcs_asd_loose_complete_late_con), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_late_con_summary <- mcs_asd_loose_complete_late_con_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    con_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_late_con_summary$group <- "late"
+
+
+mcs_asd_loose_complete_early_con_summary$lb = mcs_asd_loose_complete_early_con_summary$con_mean - 1.96*mcs_asd_loose_complete_early_con_summary$se
+mcs_asd_loose_complete_early_con_summary$ub = mcs_asd_loose_complete_early_con_summary$con_mean + 1.96*mcs_asd_loose_complete_early_con_summary$se
+mcs_asd_loose_complete_late_con_summary$lb = mcs_asd_loose_complete_late_con_summary$con_mean - 1.96*mcs_asd_loose_complete_late_con_summary$se
+mcs_asd_loose_complete_late_con_summary$ub = mcs_asd_loose_complete_late_con_summary$con_mean + 1.96*mcs_asd_loose_complete_late_con_summary$se
+MCS_no_diag_con_summary$lb = 
+  MCS_no_diag_con_summary$con_mean - 
+  1.96*MCS_no_diag_con_summary$se
+MCS_no_diag_con_summary$ub = 
+  MCS_no_diag_con_summary$con_mean + 
+  1.96*MCS_no_diag_con_summary$se
+mcs_loose_complete_sdq_con_mean_full <- rbind(mcs_asd_loose_complete_early_con_summary, mcs_asd_loose_complete_late_con_summary,MCS_no_diag_con_summary)
+mcs_loose_complete_sdq_con_mean_full <- mcs_loose_complete_sdq_con_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BCONDUCT" ~ 3,
+  sweep == "CCONDUCT" ~ 5,
+  sweep == "DDCONDUCT" ~ 7,
+   sweep == "ECONDUCT" ~ 11,
+   sweep == "FCONDUCT" ~ 14,
+   sweep == "GCONDUCT" ~ 17,
+))
+
+
+## Hyperactivity/Inattention
+# Early 
+mcs_asd_loose_complete_early_hyp <- mcs_asd_loose_complete_early[,c(2,3,6,12,18,24,30,36)]
+
+mcs_asd_loose_complete_early_hyp_long <- data.table::melt(setDT(mcs_asd_loose_complete_early_hyp), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_early_hyp_summary <- mcs_asd_loose_complete_early_hyp_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    hyp_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_early_hyp_summary$group <- "early"
+
+# Late
+
+mcs_asd_loose_complete_late_hyp <- mcs_asd_loose_complete_late[,c(2,3,6,12,18,24,30,36)]
+
+mcs_asd_loose_complete_late_hyp_long <- melt(setDT(mcs_asd_loose_complete_late_hyp), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_late_hyp_summary <- mcs_asd_loose_complete_late_hyp_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    hyp_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_late_hyp_summary$group <- "late"
+
+
+mcs_asd_loose_complete_early_hyp_summary$lb = mcs_asd_loose_complete_early_hyp_summary$hyp_mean - 1.96*mcs_asd_loose_complete_early_hyp_summary$se
+mcs_asd_loose_complete_early_hyp_summary$ub = mcs_asd_loose_complete_early_hyp_summary$hyp_mean + 1.96*mcs_asd_loose_complete_early_hyp_summary$se
+mcs_asd_loose_complete_late_hyp_summary$lb = mcs_asd_loose_complete_late_hyp_summary$hyp_mean - 1.96*mcs_asd_loose_complete_late_hyp_summary$se
+mcs_asd_loose_complete_late_hyp_summary$ub = mcs_asd_loose_complete_late_hyp_summary$hyp_mean + 1.96*mcs_asd_loose_complete_late_hyp_summary$se
+MCS_no_diag_hyp_summary$lb = 
+  MCS_no_diag_hyp_summary$hyp_mean - 
+  1.96*MCS_no_diag_hyp_summary$se
+MCS_no_diag_hyp_summary$ub = 
+  MCS_no_diag_hyp_summary$hyp_mean + 
+  1.96*MCS_no_diag_hyp_summary$se
+mcs_loose_complete_sdq_hyp_mean_full <- rbind(mcs_asd_loose_complete_early_hyp_summary, mcs_asd_loose_complete_late_hyp_summary,MCS_no_diag_hyp_summary)
+mcs_loose_complete_sdq_hyp_mean_full <- mcs_loose_complete_sdq_hyp_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BHYPER" ~ 3,
+  sweep == "CHYPER" ~ 5,
+  sweep == "DDHYPER" ~ 7,
+   sweep == "EHYPER" ~ 11,
+   sweep == "FHYPER" ~ 14,
+   sweep == "GHYPER" ~ 17,
+))
+
+
+## Peer relationship problems
+
+# Early 
+mcs_asd_loose_complete_early_peer <- mcs_asd_loose_complete_early[,c(2,3,7,13,19,25,31,37)]
+
+mcs_asd_loose_complete_early_peer_long <- data.table::melt(setDT(mcs_asd_loose_complete_early_peer), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_early_peer_summary <- mcs_asd_loose_complete_early_peer_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    peer_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_early_peer_summary$group <- "early"
+
+# Late
+
+mcs_asd_loose_complete_late_peer <- mcs_asd_loose_complete_late[,c(2,3,7,13,19,25,31,37)]
+
+mcs_asd_loose_complete_late_peer_long <- melt(setDT(mcs_asd_loose_complete_late_peer), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_late_peer_summary <- mcs_asd_loose_complete_late_peer_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    peer_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_late_peer_summary$group <- "late"
+
+
+mcs_asd_loose_complete_early_peer_summary$lb = mcs_asd_loose_complete_early_peer_summary$peer_mean - 1.96*mcs_asd_loose_complete_early_peer_summary$se
+mcs_asd_loose_complete_early_peer_summary$ub = mcs_asd_loose_complete_early_peer_summary$peer_mean + 1.96*mcs_asd_loose_complete_early_peer_summary$se
+mcs_asd_loose_complete_late_peer_summary$lb = mcs_asd_loose_complete_late_peer_summary$peer_mean - 1.96*mcs_asd_loose_complete_late_peer_summary$se
+mcs_asd_loose_complete_late_peer_summary$ub = mcs_asd_loose_complete_late_peer_summary$peer_mean + 1.96*mcs_asd_loose_complete_late_peer_summary$se
+MCS_no_diag_peer_summary$lb = 
+  MCS_no_diag_peer_summary$peer_mean - 
+  1.96*MCS_no_diag_peer_summary$se
+MCS_no_diag_peer_summary$ub = 
+  MCS_no_diag_peer_summary$peer_mean + 
+  1.96*MCS_no_diag_peer_summary$se
+mcs_loose_complete_sdq_peer_mean_full <- rbind(mcs_asd_loose_complete_early_peer_summary, mcs_asd_loose_complete_late_peer_summary,MCS_no_diag_peer_summary)
+mcs_loose_complete_sdq_peer_mean_full <- mcs_loose_complete_sdq_peer_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BPEER" ~ 3,
+  sweep == "CPEER" ~ 5,
+  sweep == "DDPEER" ~ 7,
+   sweep == "EPEER" ~ 11,
+   sweep == "FPEER" ~ 14,
+   sweep == "GPEER" ~ 17,
+))
+
+
+
+## Prosocial behaviours
+# Early 
+mcs_asd_loose_complete_early_pro <- mcs_asd_loose_complete_early[,c(2,3,8,14,20,26,32,38)]
+
+mcs_asd_loose_complete_early_pro_long <- data.table::melt(setDT(mcs_asd_loose_complete_early_pro), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_early_pro_summary <- mcs_asd_loose_complete_early_pro_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    pro_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_early_pro_summary$group <- "early"
+
+# Late
+
+mcs_asd_loose_complete_late_pro <- mcs_asd_loose_complete_late[,c(2,3,8,14,20,26,32,38)]
+
+mcs_asd_loose_complete_late_pro_long <- melt(setDT(mcs_asd_loose_complete_late_pro), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_complete_late_pro_summary <- mcs_asd_loose_complete_late_pro_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    pro_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+mcs_asd_loose_complete_late_pro_summary$group <- "late"
+
+
+mcs_asd_loose_complete_early_pro_summary$lb = mcs_asd_loose_complete_early_pro_summary$pro_mean - 1.96*mcs_asd_loose_complete_early_pro_summary$se
+mcs_asd_loose_complete_early_pro_summary$ub = mcs_asd_loose_complete_early_pro_summary$pro_mean + 1.96*mcs_asd_loose_complete_early_pro_summary$se
+mcs_asd_loose_complete_late_pro_summary$lb = mcs_asd_loose_complete_late_pro_summary$pro_mean - 1.96*mcs_asd_loose_complete_late_pro_summary$se
+mcs_asd_loose_complete_late_pro_summary$ub = mcs_asd_loose_complete_late_pro_summary$pro_mean + 1.96*mcs_asd_loose_complete_late_pro_summary$se
+MCS_no_diag_pro_summary$lb = 
+  MCS_no_diag_pro_summary$pro_mean - 
+  1.96*MCS_no_diag_pro_summary$se
+MCS_no_diag_pro_summary$ub = 
+  MCS_no_diag_pro_summary$pro_mean + 
+  1.96*MCS_no_diag_pro_summary$se
+mcs_loose_complete_sdq_pro_mean_full <- rbind(mcs_asd_loose_complete_early_pro_summary, mcs_asd_loose_complete_late_pro_summary,MCS_no_diag_pro_summary)
+mcs_loose_complete_sdq_pro_mean_full <- mcs_loose_complete_sdq_pro_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BPROSOC" ~ 3,
+  sweep == "CPROSOC" ~ 5,
+  sweep == "DDPROSOC" ~ 7,
+   sweep == "EPROSOC" ~ 11,
+   sweep == "FPROSOC" ~ 14,
+   sweep == "GPROSOC" ~ 17,
+))
+
+
+====================================================== MCS-expanded GMM ================================================================
+asd_loose_SDQ_complete_gmm <- dplyr::mutate(asd_loose_SDQ_complete, numericID = row_number())
+
+asd_loose_wide_sdq_ttl <- asd_loose_SDQ_complete_gmm[,c("numericID","cmid","sex","diag.age","BEBDTOT","CEBDTOT", "DDDEBDTOT" ,"EEBDTOT","FEBDTOT","GEBDTOT")]
+asd_loose_long_sdq_ttl <- melt(setDT(asd_loose_wide_sdq_ttl), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+asd_loose_long_sdq_ttl <- asd_loose_long_sdq_ttl %>%
+  mutate(Sweep = case_when(
+    sweep == "BEBDTOT" ~ 2,
+    sweep == "CEBDTOT" ~ 3,
+    sweep == "DDDEBDTOT" ~ 4,
+    sweep == "EEBDTOT" ~ 5,
+    sweep == "FEBDTOT" ~ 6,
+    sweep == "GEBDTOT" ~ 7)
+    )
+
+asd_loose_wide_sdq_emo <- asd_loose_SDQ_complete_gmm[,c("numericID","cmid","sex","diag.age","BEMOTION","CEMOTION", "DDEMOTION" ,"EEMOTION","FEMOTION","GEMOTION")]
+asd_loose_long_sdq_emo <- melt(setDT(asd_loose_wide_sdq_emo), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+asd_loose_long_sdq_emo <- asd_loose_long_sdq_emo %>%
+  mutate(Sweep = case_when(
+    sweep == "BEMOTION" ~ 2,
+    sweep == "CEMOTION" ~ 3,
+    sweep == "DDEMOTION" ~ 4,
+    sweep == "EEMOTION" ~ 5,
+    sweep == "FEMOTION" ~ 6,
+    sweep == "GEMOTION" ~ 7)
+    )
+
+asd_loose_wide_sdq_con <- asd_loose_SDQ_complete_gmm[,c("numericID","cmid","sex","diag.age","BCONDUCT","CCONDUCT", "DDCONDUCT" ,"ECONDUCT","FCONDUCT","GCONDUCT")]
+asd_loose_long_sdq_con <- melt(setDT(asd_loose_wide_sdq_con), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+asd_loose_long_sdq_con <- asd_loose_long_sdq_con %>%
+  mutate(Sweep = case_when(
+    sweep == "BCONDUCT" ~ 2,
+    sweep == "CCONDUCT" ~ 3,
+    sweep == "DDCONDUCT" ~ 4,
+    sweep == "ECONDUCT" ~ 5,
+    sweep == "FCONDUCT" ~ 6,
+    sweep == "GCONDUCT" ~ 7)
+    )
+
+asd_loose_wide_sdq_hyp <- asd_loose_SDQ_complete_gmm[,c("numericID","cmid","sex","diag.age","BHYPER","CHYPER", "DDHYPER" ,"EHYPER","FHYPER","GHYPER")]
+asd_loose_long_sdq_hyp <- melt(setDT(asd_loose_wide_sdq_hyp), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+asd_loose_long_sdq_hyp <- asd_loose_long_sdq_hyp %>%
+  mutate(Sweep = case_when(
+    sweep == "BHYPER" ~ 2,
+    sweep == "CHYPER" ~ 3,
+    sweep == "DDHYPER" ~ 4,
+    sweep == "EHYPER" ~ 5,
+    sweep == "FHYPER" ~ 6,
+    sweep == "GHYPER" ~ 7)
+    )
+
+asd_loose_wide_sdq_peer <- asd_loose_SDQ_complete_gmm[,c("numericID","cmid","sex","diag.age","BPEER","CPEER", "DDPEER" ,"EPEER","FPEER","GPEER")]
+asd_loose_long_sdq_peer <- melt(setDT(asd_loose_wide_sdq_peer), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+asd_loose_long_sdq_peer <- asd_loose_long_sdq_peer %>%
+  mutate(Sweep = case_when(
+    sweep == "BPEER" ~ 2,
+    sweep == "CPEER" ~ 3,
+    sweep == "DDPEER" ~ 4,
+    sweep == "EPEER" ~ 5,
+    sweep == "FPEER" ~ 6,
+    sweep == "GPEER" ~ 7)
+    )
+
+asd_loose_wide_sdq_pro <- asd_loose_SDQ_complete_gmm[,c("numericID","cmid","sex","diag.age","BPROSOC","CPROSOC", "DDPROSOC" ,"EPROSOC","FPROSOC","GPROSOC")]
+asd_loose_long_sdq_pro <- melt(setDT(asd_loose_wide_sdq_pro), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+asd_loose_long_sdq_pro <- asd_loose_long_sdq_pro %>%
+  mutate(Sweep = case_when(
+    sweep == "BPROSOC" ~ 2,
+    sweep == "CPROSOC" ~ 3,
+    sweep == "DDPROSOC" ~ 4,
+    sweep == "EPROSOC" ~ 5,
+    sweep == "FPROSOC" ~ 6,
+    sweep == "GPROSOC" ~ 7)
+    )
+
+asd_loose_SDQ_complete_gmm_nopro0 <- dplyr::mutate(asd_loose_SDQ_complete_nopro0, numericID = row_number())
+asd_loose_wide_sdq_pro_no0 <- asd_loose_SDQ_complete_gmm_nopro0[,c("numericID","cmid","sex","diag.age","BPROSOC","CPROSOC", "DDPROSOC" ,"EPROSOC","FPROSOC","GPROSOC")]
+asd_loose_long_sdq_pro_no0 <- melt(setDT(asd_loose_wide_sdq_pro_no0), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+asd_loose_long_sdq_pro_no0 <- asd_loose_long_sdq_pro_no0 %>%
+  mutate(Sweep = case_when(
+    sweep == "BPROSOC" ~ 2,
+    sweep == "CPROSOC" ~ 3,
+    sweep == "DDPROSOC" ~ 4,
+    sweep == "EPROSOC" ~ 5,
+    sweep == "FPROSOC" ~ 6,
+    sweep == "GPROSOC" ~ 7)
+    )
+
+
+## Total
+
+
+age <- c("3","5","7","11","14","17")
+mcs_ttl_gmm1_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =asd_loose_long_sdq_ttl)
+summary(mcs_ttl_gmm1_loose)
+
+
+mcs_ttl_gmm2_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = asd_loose_long_sdq_ttl, mixture = ~ Sweep,
+nwg=T, B = mcs_ttl_gmm1_loose)
+summary(mcs_ttl_gmm2_loose)
+
+
+
+mcs_ttl_gmm3_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = asd_loose_long_sdq_ttl, mixture = ~ Sweep,
+nwg=T, B = mcs_ttl_gmm1_loose)
+summary(mcs_ttl_gmm3_loose)
+
+mcs_ttl_gmm4_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = asd_loose_long_sdq_ttl, mixture = ~ Sweep,
+nwg=T, B = mcs_ttl_gmm1_loose)
+summary(mcs_ttl_gmm4_loose)
+
+# make a table with results for the models:
+fit_ind <- summarytable(mcs_ttl_gmm1_loose, mcs_ttl_gmm2_loose,mcs_ttl_gmm3_loose,mcs_ttl_gmm4_loose,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+mcs_loose_ttl_people2 <- as.data.frame(mcs_ttl_gmm2_loose$pprob[,1:2])
+asd_loose_long_sdq_ttl <- merge(asd_loose_long_sdq_ttl,mcs_loose_ttl_people2, by = "numericID")
+total_threeway <- xtabs(~ sex+diag.age+class, data = asd_loose_long_sdq_ttl)
+ftable(total_threeway)
+asd_loose_long_sdq_ttl <- asd_loose_long_sdq_ttl %>% dplyr::mutate(Sweep.age = case_when(Sweep == 2 ~ 3,Sweep == 3 ~ 5, Sweep == 4 ~ 7, Sweep == 5 ~ 11, Sweep == 6 ~ 14, Sweep == 7 ~ 17 ))
+
+asd_loose_long_sdq_ttl$Sweep.age <- as.numeric(asd_loose_long_sdq_ttl$Sweep.age)
+asd_loose_long_sdq_ttl$class <- as.factor(asd_loose_long_sdq_ttl$class)
+
+## Emotional symptoms
+
+mcs_emo_gmm1_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =asd_loose_long_sdq_emo)
+summary(mcs_emo_gmm1_loose)
+
+
+mcs_emo_gmm2_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = asd_loose_long_sdq_emo, mixture = ~ Sweep,
+nwg=T, B = mcs_emo_gmm1_loose)
+summary(mcs_emo_gmm2_loose)
+
+
+
+mcs_emo_gmm3_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = asd_loose_long_sdq_emo, mixture = ~ Sweep,
+nwg=T, B = mcs_emo_gmm1_loose)
+summary(mcs_emo_gmm3_loose)
+
+mcs_emo_gmm4_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = asd_loose_long_sdq_emo, mixture = ~ Sweep,
+nwg=T, B = mcs_emo_gmm1_loose)
+summary(mcs_emo_gmm4_loose)
+
+# make a table with results for the models:
+fit_ind <- summarytable(mcs_emo_gmm1_loose, mcs_emo_gmm2_loose,mcs_emo_gmm3_loose,mcs_emo_gmm4_loose,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+mcs_loose_emo_people2 <- as.data.frame(mcs_emo_gmm2_loose$pprob[,1:2])
+asd_loose_long_sdq_emo <- merge(asd_loose_long_sdq_emo,mcs_loose_emo_people2, by = "numericID")
+
+asd_loose_long_sdq_emo <- asd_loose_long_sdq_emo %>% dplyr::mutate(Sweep.age = case_when(Sweep == 2 ~ 3,Sweep == 3 ~ 5, Sweep == 4 ~ 7, Sweep == 5 ~ 11, Sweep == 6 ~ 14, Sweep == 7 ~ 17 ))
+
+asd_loose_long_sdq_emo$Sweep.age <- as.numeric(asd_loose_long_sdq_emo$Sweep.age)
+asd_loose_long_sdq_emo$class <- as.factor(asd_loose_long_sdq_emo$class)
+
+
+
+## Conduct problems
+
+mcs_con_gmm1_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =asd_loose_long_sdq_con)
+summary(mcs_con_gmm1_loose)
+
+
+mcs_con_gmm2_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = asd_loose_long_sdq_con, mixture = ~ Sweep,
+nwg=T, B = mcs_con_gmm1_loose)
+summary(mcs_con_gmm2_loose)
+
+
+mcs_con_gmm3_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = asd_loose_long_sdq_con, mixture = ~ Sweep,
+nwg=T, B = mcs_con_gmm1_loose)
+summary(mcs_con_gmm3_loose)
+
+mcs_con_gmm4_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = asd_loose_long_sdq_con, mixture = ~ Sweep,
+nwg=T, B = mcs_con_gmm1_loose)
+summary(mcs_con_gmm4_loose)
+
+fit_ind <- summarytable(mcs_con_gmm1_loose, mcs_con_gmm2_loose,mcs_con_gmm3_loose,mcs_con_gmm4_loose,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+mcs_loose_con_people2 <- as.data.frame(mcs_con_gmm2_loose$pprob[,1:2])
+asd_loose_long_sdq_con2 <- merge(asd_loose_long_sdq_con,mcs_loose_con_people2, by = "numericID")
+
+asd_loose_long_sdq_con2 <- asd_loose_long_sdq_con2 %>% dplyr::mutate(Sweep.age = case_when(Sweep == 2 ~ 3,Sweep == 3 ~ 5, Sweep == 4 ~ 7, Sweep == 5 ~ 11, Sweep == 6 ~ 14, Sweep == 7 ~ 17 ))
+
+asd_loose_long_sdq_con2$Sweep.age <- as.numeric(asd_loose_long_sdq_con2$Sweep.age)
+asd_loose_long_sdq_con2$class <- as.factor(asd_loose_long_sdq_con2$class)
+
+
+mcs_loose_con_people3 <- as.data.frame(mcs_con_gmm3_loose$pprob[,1:2])
+asd_loose_long_sdq_con3 <- merge(asd_loose_long_sdq_con,mcs_loose_con_people3, by = "numericID") %>% dplyr::mutate(Sweep.age = case_when(Sweep == 2 ~ 3,Sweep == 3 ~ 5, Sweep == 4 ~ 7, Sweep == 5 ~ 11, Sweep == 6 ~ 14, Sweep == 7 ~ 17 ))
+
+asd_loose_long_sdq_con3$Sweep.age <- as.numeric(asd_loose_long_sdq_con3$Sweep.age)
+asd_loose_long_sdq_con3$class <- as.factor(asd_loose_long_sdq_con3$class)
+
+
+
+## Hyperactivity
+
+mcs_hyp_gmm1_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =asd_loose_long_sdq_hyp)
+summary(mcs_hyp_gmm1_loose)
+
+
+mcs_hyp_gmm2_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = asd_loose_long_sdq_hyp, mixture = ~ Sweep,
+nwg=T, B = mcs_hyp_gmm1_loose)
+summary(mcs_hyp_gmm2_loose)
+
+
+mcs_hyp_gmm3_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = asd_loose_long_sdq_hyp, mixture = ~ Sweep,
+nwg=T, B = mcs_hyp_gmm1_loose)
+summary(mcs_hyp_gmm3_loose)
+
+mcs_hyp_gmm4_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = asd_loose_long_sdq_hyp, mixture = ~ Sweep,
+nwg=T, B = mcs_hyp_gmm1_loose)
+summary(mcs_hyp_gmm4_loose)
+
+mcs_hyp_gmm5_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 5, data = asd_loose_long_sdq_hyp, mixture = ~ Sweep,
+nwg=T, B = mcs_hyp_gmm1_loose)
+summary(mcs_hyp_gmm4_loose)
+
+# make a table with results for the models:
+fit_ind <- summarytable(mcs_hyp_gmm1_loose, mcs_hyp_gmm2_loose,mcs_hyp_gmm3_loose,mcs_hyp_gmm4_loose,mcs_hyp_gmm5_loose,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+
+mcs_loose_hyp_people2 <- as.data.frame(mcs_hyp_gmm2_loose$pprob[,1:2])
+asd_loose_long_sdq_hyp2 <- merge(asd_loose_long_sdq_hyp,mcs_loose_hyp_people2, by = "numericID")
+
+asd_loose_long_sdq_hyp2 <- asd_loose_long_sdq_hyp2 %>% dplyr::mutate(Sweep.age = case_when(Sweep == 2 ~ 3,Sweep == 3 ~ 5, Sweep == 4 ~ 7, Sweep == 5 ~ 11, Sweep == 6 ~ 14, Sweep == 7 ~ 17 ))
+
+asd_loose_long_sdq_hyp2$Sweep.age <- as.numeric(asd_loose_long_sdq_hyp2$Sweep.age)
+asd_loose_long_sdq_hyp2$class <- as.factor(asd_loose_long_sdq_hyp2$class)
+
+
+
+## Peer relationship problems
+
+mcs_peer_gmm1_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =asd_loose_long_sdq_peer)
+summary(mcs_peer_gmm1_loose)
+
+
+mcs_peer_gmm2_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = asd_loose_long_sdq_peer, mixture = ~ Sweep,
+nwg=T, B = mcs_peer_gmm1_loose)
+summary(mcs_peer_gmm2_loose)
+
+
+
+mcs_peer_gmm3_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = asd_loose_long_sdq_peer, mixture = ~ Sweep,
+nwg=T, B = mcs_peer_gmm1_loose)
+summary(mcs_peer_gmm3_loose)
+
+mcs_peer_gmm4_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = asd_loose_long_sdq_peer, mixture = ~ Sweep,
+nwg=T, B = mcs_peer_gmm1_loose)
+summary(mcs_peer_gmm4_loose)
+
+
+fit_ind <- summarytable(mcs_peer_gmm1_loose, mcs_peer_gmm2_loose,mcs_peer_gmm3_loose,mcs_peer_gmm4_loose,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+mcs_loose_peer_people2 <- as.data.frame(mcs_peer_gmm2_loose$pprob[,1:2])
+asd_loose_long_sdq_peer2 <- merge(asd_loose_long_sdq_peer,mcs_loose_peer_people2, by = "numericID")
+
+asd_loose_long_sdq_peer2 <- asd_loose_long_sdq_peer2 %>% dplyr::mutate(Sweep.age = case_when(Sweep == 2 ~ 3,Sweep == 3 ~ 5, Sweep == 4 ~ 7, Sweep == 5 ~ 11, Sweep == 6 ~ 14, Sweep == 7 ~ 17 ))
+
+asd_loose_long_sdq_peer2$Sweep.age <- as.numeric(asd_loose_long_sdq_peer2$Sweep.age)
+asd_loose_long_sdq_peer2$class <- as.factor(asd_loose_long_sdq_peer2$class)
+
+
+
+## Prosocial behaviours
+
+mcs_pro_gmm1_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =asd_loose_long_sdq_pro)
+summary(mcs_pro_gmm1_loose)
+
+
+mcs_pro_gmm2_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = asd_loose_long_sdq_pro, mixture = ~ Sweep,
+nwg=T, B = mcs_pro_gmm1_loose)
+summary(mcs_pro_gmm2_loose)
+
+
+
+mcs_pro_gmm3_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = asd_loose_long_sdq_pro, mixture = ~ Sweep,
+nwg=T, B = mcs_pro_gmm1_loose)
+summary(mcs_pro_gmm3_loose)
+
+mcs_pro_gmm4_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = asd_loose_long_sdq_pro, mixture = ~ Sweep,
+nwg=T, B = mcs_pro_gmm1_loose)
+summary(mcs_pro_gmm4_loose)
+
+
+fit_ind <- summarytable(mcs_pro_gmm1_loose, mcs_pro_gmm2_loose,mcs_pro_gmm3_loose,mcs_pro_gmm4_loose,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+
+mcs_loose_pro_people2 <- as.data.frame(mcs_pro_gmm2_loose$pprob[,1:2])
+asd_loose_long_sdq_pro2 <- merge(asd_loose_long_sdq_pro,mcs_loose_pro_people2, by = "numericID")
+
+asd_loose_long_sdq_pro2 <- asd_loose_long_sdq_pro2 %>% dplyr::mutate(Sweep.age = case_when(Sweep == 2 ~ 3,Sweep == 3 ~ 5, Sweep == 4 ~ 7, Sweep == 5 ~ 11, Sweep == 6 ~ 14, Sweep == 7 ~ 17 ))
+
+asd_loose_long_sdq_pro2$Sweep.age <- as.numeric(asd_loose_long_sdq_pro2$Sweep.age)
+asd_loose_long_sdq_pro2$class <- as.factor(asd_loose_long_sdq_pro2$class)
+
+
+mcs_loose_pro_people3 <- as.data.frame(mcs_pro_gmm3_loose$pprob[,1:2])
+asd_loose_long_sdq_pro3 <- merge(asd_loose_long_sdq_pro,mcs_loose_pro_people3, by = "numericID")
+
+asd_loose_long_sdq_pro3 <- asd_loose_long_sdq_pro3 %>% dplyr::mutate(Sweep.age = case_when(Sweep == 2 ~ 3,Sweep == 3 ~ 5, Sweep == 4 ~ 7, Sweep == 5 ~ 11, Sweep == 6 ~ 14, Sweep == 7 ~ 17 ))
+
+asd_loose_long_sdq_pro3$Sweep.age <- as.numeric(asd_loose_long_sdq_pro3$Sweep.age)
+asd_loose_long_sdq_pro3$class <- as.factor(asd_loose_long_sdq_pro3$class)
+
+
+
+# Extract group membership for complete SDQ sample (n = 238)
+
+mcs_loose_complete_gmm_grp <- cbind(mcs_loose_ttl_people2,mcs_loose_emo_people2$class,mcs_loose_con_people2$class,mcs_loose_con_people3$class,mcs_loose_hyp_people2$class,mcs_loose_peer_people2$class,mcs_loose_pro_people2$class,mcs_loose_pro_people3$class)
+
+
+mcs_loose_complete_gmm_grp <- cbind(asd_loose_SDQ_complete_gmm$cmid,mcs_loose_complete_gmm_grp)
+names(mcs_loose_complete_gmm_grp) <- c("cmid","numericID","ttl2","emo2","con2","con3","hyp2","peer2","pro2","pro3")
+mcs_loose_complete_gmm_grp_demo <- merge(asd_loose_SDQ_complete_gmm[c(1,2,40)],merge(asd_loose_demo,mcs_loose_complete_gmm_grp, by = "cmid", all.y = TRUE), by = c("MCSID","cmid"))
+
+==================================================================================================
+
+
+## Load covariates 
+(cognitive aptitude, ethnicity,maternal age at delivery, emonomic status, area deprivation)
+
+mcs_cog <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ID_identifier.csv")
+mcs_cog$cmid <- paste(mcs_cog$mcs_cog_pca.MCSID, mcs_cog$mcs_cog_pca.BCNUM00, sep = "")
+mcs_cog <- mcs_cog[,c(2,7,5,6)]
+names(mcs_cog)[c(1,3)] <- c("MCSID","cog.PC1")
+mcs_loose_asd_cog <- mcs_cog %>% filter(cmid %in% asd_loose_SDQ_complete$cmid) # N = 165, no ID, complete cases
+
+
+
+mcs2_parent_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_interview.tab")
+
+
+mcs2_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ses_identifier.csv")
+#asd_loose_ses <- mcs2_ses_identifier %>% filter(MCSID %in% mcs_loose_complete_gmm_grp_demo$MCSID)  # no one had complete SES (i.e., including parental educational background)
+mcs2_dep_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_deprivation_identifier.csv") 
+mcs_loose_dep <- mcs2_dep_identifier %>% filter(MCSID %in% mcs_loose_complete_gmm_grp_demo$MCSID) %>% dplyr::select(MCSID,PC1)
+names(mcs_loose_dep)[2] <- "dep.PC1"
+mcs2_family_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_family_derived.tab")
+
+mcs2_other_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_other_ses_identifier.csv")
+mcs_loose_es <- mcs2_other_ses_identifier %>% filter(MCSID %in% mcs_loose_complete_gmm_grp_demo$MCSID) %>% dplyr::select(MCSID,PC1) 
+names(mcs_loose_es)[2] <- "es.PC1"
+
+mcs_loose_covs <- merge(mcs_loose_asd_cog, merge(mcs_loose_dep,mcs_loose_es, by = "MCSID"), by = "MCSID")
+
+mcs_loose_gmm_covs <- merge(mcs_loose_complete_gmm_grp_demo,mcs_loose_covs, by = c("MCSID","cmid"))
+
+
+
+
+library(tidyverse)
+mcs1_devmile <- dplyr::select(mcs1_parent_cm_interview, c("MCSID","cmid","APNUM00","ACSMIL00","ACSITU00","ACSTAN00","ACHAND00","ACGRAB00","ACPICK00","ACPTOY00",
+"ACWALK00","ACGIVE00","ACWAVE00","ACARMS00","ACNODS00","ACMOVE00"))
+mcs1_devmile <- mcs1_devmile %>% filter(APNUM00 == "1") %>% filter_at(vars(-MCSID, -APNUM00,-cmid), all_vars( . >- 1))
+mcs2_devmile <- dplyr::select(mcs2_parent_cm_interview, c("MCSID","cmid","BPNUM00","BPDRDA00","BPCLDA00"))
+mcs2_devmile <- mcs2_devmile %>% filter(BPNUM00 == "1") %>% filter_at(vars(-MCSID, -BPNUM00,-cmid),all_vars( . > -1 & . < 4))
+mcs3_devmile <- dplyr::select(mcs3_parent_cm_interview, c("MCSID","cmid","CPNUM00","CPSQCO00","CPDRSS00")) 
+mcs3_devmile <- mcs3_devmile %>% filter(CPNUM00 == "1") %>% filter_at(vars(-MCSID, -CPNUM00, -cmid), all_vars(. <3 &  . > -1))
+mcs_devmile <- inner_join(inner_join(mcs1_devmile, mcs2_devmile, by = c("MCSID","cmid")), mcs3_devmile, by = c("MCSID","cmid") )
+mcs_devmile <- subset(mcs_devmile, select=-c(APNUM00, BPNUM00, CPNUM00))
+names(mcs_devmile)[3:ncol(mcs_devmile)] <- c("smile","situp","standup","handtoy", "grab", "holdsmall",
+"passtoy","park","givetop","wavebye","extendarm","nodyes","move","dry","clean","square","dress")
+# sweep1: 1 = often; 2 = Once or Twice; 3 = Not yet
+# Sweep2: 1 = always; 2 = sometimes; 3 = never; 4 = dk
+# sweep3: 1 = yes; 2 = no; 3 = dk
+
+
+mcs_devmile$dryclean <- (mcs_devmile$dry + mcs_devmile$clean)/2
+
+mcs_devmile <- subset(mcs_devmile, select = -c(dry, clean))
+
+mcs_devmile$dryclean <- as.integer(mcs_devmile$dryclean)
+mcs_loose_gmm_cov_devmile <- merge(mcs_loose_gmm_covs,mcs_devmile , by= c("MCSID","cmid"))
+
+
+
+
+### Regression models 
+
+
+
+fit_all_cov_procon3 <- lm(diag.age ~ sex + cog.PC1 + eth + mad + es.PC1 + dep.PC1 + ttl2 + emo2 + con3 + hyp2 + peer2 + pro3 , data= mcs_loose_gmm_covs)
+summary(fit_all_cov_procon3)
+sjPlot::tab_model(fit_all_cov_procon3)
+
+fit_all_cov_procon2 <- lm(diag.age ~ sex + cog.PC1 + eth + mad + es.PC1 + dep.PC1 + ttl2 + emo2 + con2 + hyp2 + peer2 + pro2, data= mcs_loose_gmm_covs)
+summary(fit_all_cov_procon2)
+tab_model(fit_all_cov_procon2)
+
+## Compared R^2, models with 3 groups in prosocial behaviours and conduct problems fit the data better
+
+
+mcs_loose_gmm_covs$eth <- ifelse(mcs_loose_gmm_covs$eth == 1, 0,1)
+
+mcs_loose_gmm_covs_s <- mcs_loose_gmm_covs %>%
+  mutate_at(c(4:6,8,9,11,12,13,15,16,18:19), funs(c(scale(.))))
+
+fit_all_cov_procon3_s <- lm(diag.age ~ sex + cog.PC1 + eth + mad + es.PC1 + dep.PC1 + ttl2 + emo2 + con3 + hyp2 + peer2 + pro3 , data= mcs_loose_gmm_covs_s)
+summary(fit_all_cov_procon3_s)
+
+
+# working with mcs_loose_gmm_covs_s, N = 164
+
+# Create the mediation model
+
+model_loose_1 <- "
+  # direct effects
+  diag.age ~ sex +  eth + mad + cog.PC1 + es.PC1 + dep.PC1 + ttl2 + emo2 + con3 + hyp2 + peer2 + pro3"
+
+fit_1 <- lavaan::sem(model_loose_1, data = mcs_loose_gmm_covs)
+
+mcs_loose_fit_cor <- lavInspect(fit_1, what = "cor.all")
+misty::dominance.manual(mcs_loose_fit_cor)
+
+
+mcs_b_model_2 <- "
+
+  diag.age ~ s*sex + i*cog.PC1 + e*eth + m*mad + se*es.PC1 + de*dep.PC1 + t*ttl2 + em*emo2 + co*con3 + h*hyp2 + p*peer2 + pr*pro3
+
+  ttl2 ~ i1*cog.PC1 + de1*dep.PC1 + se1*es.PC1 + m1*mad + s1*sex + e1*eth
+  emo2 ~ i2*cog.PC1 + de2*dep.PC1 + se2*es.PC1 + m2*mad + s2*sex + e2*eth
+  con3 ~ i3*cog.PC1 + de3*dep.PC1 + se3*es.PC1 + m3*mad + s3*sex + e3*eth
+  hyp2 ~ i4*cog.PC1 + de4*dep.PC1 + se4*es.PC1 + m4*mad + s4*sex+ e4*eth
+  peer2 ~ i5*cog.PC1 + de5*dep.PC1 + se5*es.PC1 + m5*mad + s5*sex+ e5*eth
+  pro3 ~ i6*cog.PC1 + de6*dep.PC1 + se6*es.PC1 + m6*mad + s6*sex+ e6*eth
+  
+  
+ indirect_ttl2 := i1*t  +de1*t+se1*t+m1*t +s1*t+ e1*t
+ indirect_emo2 := i2*em  +de2*em+se2*em+m2*em +s2*em+ e2*em
+ indirect_con3 := i3*co  +de3*co+se3*co+m3*co +s3*co+ e3*co
+ indirect_hyp2 := i4*h  +de4*h+se4*h+m4*h +s4*h+ e4*h
+ indirect_peer2 := i5*p  +de5*p+se5*p+m5*p +s5*p+ e5*p
+ indirect_pro3 := i6*pr  +de6*pr+se6*pr+m6*pr +s6*pr+ e6*pr
+ 
+direct := s + i + e +m + se + de
+total_indirect := indirect_ttl2 + indirect_emo2 + indirect_con3 + indirect_hyp2 + indirect_peer2 + indirect_pro3
+total := direct + total_indirect
+  
+"
+set.seed(060524)
+serial_mcsb_fit <- lavaan::sem(mcs_b_model_2, data = mcs_loose_gmm_covs, se = "bootstrap",
+    missing = "fiml", bootstrap = 1000)
+serial_mcsb_fit_sum <- lavaan::summary(serial_mcsb_fit, standardized = TRUE, rsq = T,
+    fit = TRUE, ci = TRUE)
+serial_mcsb_fit_ParEsts <- lavaan::parameterEstimates(serial_mcsb_fit, boot.ci.type = "bca.simple",standardized = TRUE)
+serial_mcsb_fit_sum
+serial_mcsb_fit_ParEsts
+write.csv(serial_mcsb_fit_ParEsts, file = "mcsb_level2.csv")
+
+
+=================================================== Imputation ============================================
+# Developmental milestones (auxilary variables)
+
+mcs1_parent_cm_interview <- read.delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-4683-tab/tab/mcs1_parent_cm_interview.tab")
+mcs1_parent_cm_interview$cmid <- paste(mcs1_parent_cm_interview$MCSID, mcs1_parent_cm_interview$ACNUM00, sep = "")
+mcs2_parent_cm_interview <- read.delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_cm_interview.tab")
+mcs2_parent_cm_interview$cmid <- paste(mcs2_parent_cm_interview$MCSID, mcs2_parent_cm_interview$BCNUM00, sep = "")
+mcs3_parent_cm_interview <- read.delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5795-tab/tab/mcs3_parent_cm_interview.tab")
+mcs3_parent_cm_interview$cmid <- paste(mcs3_parent_cm_interview$MCSID, mcs3_parent_cm_interview$CCNUM00, sep = "")
+
+# impute subscales without total score
+asd_loose_demo <- merge(mcs_sex[c(1,2,5)], mcs_eth_mad[c(1:2,6,11)], by = c("MCSID","cmid"))
+
+
+##### Run from here
+
+
+library(naniar)
+asd_loose_SDQ_subscale <- dplyr::select(asd_loose_SDQ, -contains("BDTOT"))
+vis_miss(asd_loose_SDQ)
+gg_miss_var(as.data.frame(asd_loose_SDQ_subscale), show_pct = TRUE)
+asd_loose_SDQ %>% 
+  gg_miss_var(show_pct = TRUE, facet = diag.age)
+asd_loose_SDQ %>% 
+  gg_miss_var(show_pct = TRUE, facet = sex)
+
+
+
+# Attach other covs 
+
+
+asd_loose_SDQ_tip <- merge(merge(merge(merge(merge(merge(asd_loose_SDQ,mcs_eth_mad[,c(1,2,6,11)],by = c("MCSID","cmid"),all = T), mcs_asd_dep, by = "MCSID", all = T), mcs_asd_iq, by = "cmid", all = T),mcs_asd_ses, by = "MCSID", all = T) ,mcs_2_5_cog_asd, by = "cmid",all = T),mcs_asd_loose_devmile, by = "cmid", all =T)
+
+asd_loose_SDQ_tip_subscale <- dplyr::select(asd_loose_SDQ_tip, -contains("BDTOT"))
+
+## Examine missing percentage
+
+missing_per <- gg_miss_var(as.data.frame(asd_loose_SDQ_tip_subscale), show_pct = TRUE)
+missing_per
+missing_per_diagage <- gg_miss_var(as.data.frame(asd_loose_SDQ_tip_subscale),facet = diag.age, show_pct = TRUE)
+
+#missing_per_diagage
+#missing_per_diag <- gg_miss_var(as.data.frame(asd_loose_SDQ_tip_subscale),facet = group, show_pct = TRUE)
+#missing_per_diag
+#missing_per_sex <- gg_miss_var(as.data.frame(asd_loose_SDQ_tip_subscale),facet = sex, show_pct = TRUE)
+#missing_per_sex
+#missing_per_country <- gg_miss_var(as.data.frame(asd_loose_SDQ_tip_subscale),facet = ccountry, show_pct = TRUE)
+#missing_per_country
+
+## Decided on softimpute
+
+asd_for_imp <- asd_loose_SDQ_tip_subscale[,!names(asd_loose_SDQ_tip_subscale) %in% c("MCSID","dep_PC1","IQ_PC1","ses_PC1","group")]
+
+asd_npc_mis_sft <- apply(as.matrix(asd_for_imp[-1]) ,2,as.numeric)
+
+#percent_of_missing <- 1:70
+#  for (i in percent_of_missing) {
+#    percent_of_missing1[i] <- 100 * (sum(is.na(asd_npc_mis_sft[, i])) / nrow(asd_npc_mis_sft))
+#  }
+
+#imp_raw_sft <- softImpute(asd_npc_mis_sft,rank.max=3,lambda=1.9,trace=TRUE,type="svd")
+#imp_raw_sft_data <- as.data.frame(complete(asd_npc_mis_sft,imp_raw_sft))
+
+## Used NADIA package here
+imp_data <- NADIA::autotune_softImpute(asd_npc_mis_sft, percent_of_missing, col_type)
+imp_data <- cbind(asd_for_imp$cmid,imp_data)
+names(imp_data)[1] <- "cmid"
+
+
+imp_raw_sft_data <- cbind(asd_for_imp$cmid,imp_raw_sft_data)
+names(imp_raw_sft_data)[1] <- "cmid"
+
+
+
+## Test imputation quality
+
+# Load necessary library
+
+
+# Function to plot density curves for original and imputed datasets
+plot_density <- function(asd_for_imp, imp_data, variable_name) {
+  # Create a ggplot object for the original data
+  original_plot <- ggplot(asd_for_imp, aes(x = variable_name, fill = "Original")) +
+    geom_density(alpha = 0.5) +
+    labs(title = paste("Density Plot of", variable_name),
+         fill = "Dataset")
+
+  # Create a ggplot object for the imputed data
+  imputed_plot <- ggplot(imp_data, aes(x = variable_name, fill = "Imputed")) +
+    geom_density(alpha = 0.5) +
+    labs(title = paste("Density Plot of", variable_name),
+         fill = "Dataset")
+
+  combined_plot <- original_plot + imputed_plot +
+    theme_classic() +
+    theme(plot.title = element_text(hjust = 0.5))
+
+  return(combined_plot)
+}
+
+
+
+# Initialize a list to store the results
+ks_results <- data.frame()
+
+# Select columns from asd_for_imp and imp_data
+columns <- names(asd_for_imp)[c(3:32)]
+
+ks_results <- Map(function(x, y) {
+  result <- ks.test(x, y)
+  c(KS_statistic = result$statistic, p_value = result$p.value)
+}, asd_for_imp[columns], imp_data[columns])
+
+# Combine results into a data frame
+ks_results_df <- do.call(rbind, ks_results)
+
+# Add column names
+rownames(ks_results_df) <- columns
+ks_results_df <- as.data.frame(ks_results_df )
+# Print the results data frame
+print(ks_results_df)
+
+
+ks_results_cov <- data.frame()
+
+# Select columns from asd_for_imp and imp_data
+
+
+columns <- names(asd_for_imp)[c(34:71)]
+asd_for_imp[columns] <- lapply(asd_for_imp[columns], function(col) as.numeric(as.character(col)))
+imp_data[columns] <- lapply(imp_data[columns], function(col) as.numeric(as.character(col)))
+ks_results_cov <- Map(function(x, y) {
+  result <- ks.test(x, y)
+  c(KS_statistic = result$statistic, p_value = result$p.value)
+}, asd_for_imp[columns], imp_data[columns])
+
+# Combine results into a data frame
+ks_cov_results_df <- do.call(rbind, ks_results_cov)
+
+# Add column names
+rownames(ks_cov_results_df) <- columns
+
+# Print the results data frame
+print(ks_cov_results_df)
+
+
+
+# median imputation (as comparison)
+
+asd_for_imp[2:71] <- lapply(asd_for_imp[2:71], as.integer)
+median_raw <- impute_median(asd_for_imp ,type = "columnwise")
+median_raw
+median_raw$data <- "median"
+median_imp_data <- median_raw %>% mutate_at(2:71, as.numeric)
+
+asd_for_imp$data <- "Original"
+imp_raw_sft_data$data <- "Imputed"
+
+data_plot <- rbind(asd_for_imp,imp_raw_sft_data)
+data_plot_median <- rbind(asd_for_imp,median_imp_data)
+data_plot$sex <- as.character(data_plot$sex)
+data_plot_median$sex <- as.character(data_plot_median$sex)
+
+data_plot[3:71] <- lapply(data_plot[3:71],as.integer)
+p1 <- ggplot(data = data_plot, aes(x=BEMOTION, linetype = data)) +theme(legend.title=element_blank())+theme(legend.position = "bottom") +scale_linetype_manual(values = c("original" = "solid","imputed" = "dashed"))+
+  geom_density(alpha=.5) +
+  labs(x="Emotion")
+p1
+data_plot_median[3:71] <- lapply(data_plot_median[3:71],as.integer)
+
+
+
+density_comp <- function(data, variable_names) {
+  # Create an empty list to store individual plots
+  plots_list <- list()
+  
+  # Generate density plots for each variable
+  for (variable_name in variable_names) {
+    plot <- suppressWarnings(
+    ggplot(data, aes_string(x = variable_name, linetype = "data", na.rm = T)) +
+      geom_density(alpha = 0.1) +
+      scale_linetype_manual(values = c("original" = "solid", "imputed" = "dashed"), guide = "none") + 
+      labs(x = variable_name, y = "")) + theme_classic()
+    
+    plots_list[[variable_name]] <- plot
+  }
+  
+  # Combine individual plots into one big plot using cowplot
+  combined_plot <- cowplot::plot_grid(plotlist = plots_list, ncol = 5)
+  legend <- get_legend(p1) # Extract legend from any of the plots
+  combined_plot_with_legend <- cowplot::plot_grid(combined_plot, legend, ncol = 1,rel_heights = c(5, 0.5))
+  
+  return(combined_plot_with_legend)
+}
+
+
+variable_names <- names(data_plot)[3:32]
+comp_subscale <- suppressWarnings(density_comp(data_plot, variable_names))
+print(comp_subscale)
+comp_subscale_median <- suppressWarnings(density_comp(data_plot_median, variable_names))
+print(comp_subscale_median)
+
+
+names(data_plot)[34:71] <- c("eth","mad","country","dep_overall","dep_income",       "dep_employment", "dep_healthdisability", "dep_eduskilltrain","OECD","employment_status","OECD_60bar","housing_tenure","Bschool_readiness","Bnaming_vocab","Cnaming_vocab","Cpattern_constr","Cpic_sim","Dpattern_constr","Dword_read","Dmaths","ECANTAB","smile","sitsup","stands","hand","grab","hold","pass","playground","givetoy","wavebye","arm","nodyes","move","dry","clean","drawsquare","dress")
+cov_variable_names <- names(data_plot)[34:71]
+comp_covs <- suppressWarnings(density_comp(data_plot, cov_variable_names))
+print(comp_covs)
+
+
+# Initialize a list to store the results
+ks_results_median <- data.frame()
+
+# Select columns from asd_for_imp and imp_data
+columns <- names(asd_for_imp)[c(3:32)]
+
+ks_results_median <- Map(function(x, y) {
+  result <- ks.test(x, y)
+  c(KS_statistic = result$statistic, p_value = result$p.value)
+}, asd_for_imp[columns], median_imp_data[columns])
+
+# Combine results into a data frame
+ks_results_median_df <- do.call(rbind, ks_results_median)
+
+# Add column names
+rownames(ks_results_median_df) <- columns
+ks_results_median_df <- as.data.frame(ks_results_median_df )
+# Print the results data frame
+print(ks_results_df)
+
+
+
+=========================================== MCS Imputed data analysis ==========================================
+## Generate total score on imputed data
+
+
+# Early 
+mcs_asd_loose_early <- asd_loose_SDQ[asd_loose_SDQ$group == "Early",]
+mcs_asd_loose_late <- asd_loose_SDQ[asd_loose_SDQ$group == "Late",]
+mcs_asd_loose_early_ttl <- mcs_asd_loose_early[,c(2,3,9,15,21,27,33,39)]
+
+mcs_asd_loose_early_ttl_long <- melt(setDT(mcs_asd_loose_early_ttl), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_early_ttl_summary <- mcs_asd_loose_early_ttl_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    ttl_mean = mean(value, na.rm = TRUE)
+  )
+mcs_asd_loose_early_ttl_summary$group <- "early"
+
+# Late
+
+mcs_asd_loose_late_ttl <- mcs_asd_loose_late[,c(2,3,9,15,21,27,33,39)]
+
+mcs_asd_loose_late_ttl_long <- melt(setDT(mcs_asd_loose_late_ttl), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+mcs_asd_loose_late_ttl_summary <- mcs_asd_loose_late_ttl_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    ttl_mean = mean(value, na.rm = TRUE)
+  )
+mcs_asd_loose_late_ttl_summary$group <- "late"
+
+# No diagnosis
+MCS_no_diag <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_control.csv") # 6047 in total
+MCS_no_diag$sex_num <- ifelse(MCS_no_diag$Sex == "Male", 1,2)
+MCS_no_diag$grp <- "no_diag"
+MCS_no_diag$grp_num <- 3
+MCS_sdq_no_diag <- MCS_no_diag[,c(1:21,34:39,22:33,40:45)]
+MCS_no_diag_sdq_ttl <- MCS_sdq_no_diag[,c(1,9,15,21,27,33,39,42)]
+
+MCS_no_diag_sdq_ttl_long <- melt(setDT(MCS_no_diag_sdq_ttl), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_ttl_summary <- MCS_no_diag_sdq_ttl_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value),
+    ttl_mean = mean(value)
+  )
+MCS_no_diag_ttl_summary$group <- "no_diag"
+
+
+mcs_asd_loose_early_ttl_summary$lb = mcs_asd_loose_early_ttl_summary$ttl_mean - mcs_asd_loose_early_ttl_summary$sd
+mcs_asd_loose_early_ttl_summary$ub = mcs_asd_loose_early_ttl_summary$ttl_mean + mcs_asd_loose_early_ttl_summary$sd
+mcs_asd_loose_late_ttl_summary$lb = mcs_asd_loose_late_ttl_summary$ttl_mean - mcs_asd_loose_late_ttl_summary$sd
+mcs_asd_loose_late_ttl_summary$ub = mcs_asd_loose_late_ttl_summary$ttl_mean + mcs_asd_loose_late_ttl_summary$sd
+
+mcs_loose_sdq_total_mean_full <- full_join(mcs_asd_loose_early_ttl_summary, mcs_asd_loose_late_ttl_summary)
+mcs_loose_sdq_total_mean_full <- mcs_loose_sdq_total_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BEBDTOT" ~ 3,
+  sweep == "CEBDTOT" ~ 5,
+  sweep == "DDDEBDTOT" ~ 7,
+   sweep == "EEBDTOT" ~ 11,
+   sweep == "FEBDTOT" ~ 14,
+   sweep == "GEBDTOT" ~ 17,
+))
+
+
+
+## LGCM 
+
+soft_imp_data <- cbind(asd_loose_SDQ[c(1:3,40,41)], sft_imp_data)
+soft_imp_data <- soft_imp_data %>% dplyr::mutate(dplyr::select(.,BEBDTOT = rowSums(BEMOTION, BCONDUCT,BHYPER,BPEER)), CEBDTOT = rowSums(CEMOTION,CCONDUCT,CHYPER,CPEER), DDDEBDTOT = rowSums(DDEMOTION,DDCONDUCT,DDHYPER,DDPEER), EEBDTOT = rowSums(EEMOTION,ECONDUCT,EHYPER,EPEER), FEBDTOT = rowSums(FEMOTION,FCONDUCT,FHYPER,FPEER), GEBDTOT = rowSums(GEMOTION,GCONDUCT,GHYPER,GPEEER))
+mcs_imp_agestr_ttl <- "
+int =~ 1*BEBDTOT + 1*CEBDTOT + 1*DDDEBDTOT + 1*EEBDTOT + 1*FEBDTOT + 1*GEBDTOT
+slp =~ 3*BEBDTOT + 5*CEBDTOT + 7*DDDEBDTOT + 11*EEBDTOT + 14*FEBDTOT + 17*GEBDTOT
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+
+fit_mcs_imp_agestr_ttl <- growth(mcs_imp_agestr_ttl, data = asd_imp_SDQ, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_mcs_imp_agestr_ttl_r <- growth(mcs_imp_agestr_ttl, data = asd_imp_SDQ, group = "group", missing = "fiml", estimator = "mlr", fixed.x = F)
+
+summary(fit_mcs_imp_agestr_ttl)
+summary(fit_mcs_imp_agestr_ttl_r)
+
+
+# Quadratic
+
+mcs_loose_agestr_ttl_adj_2 <- "
+int =~ 1*BEBDTOT + 1*CEBDTOT + 1*DDDEBDTOT + 1*EEBDTOT + 1*FEBDTOT + 1*GEBDTOT
+slp =~ 3*BEBDTOT + 5*CEBDTOT + 7*DDDEBDTOT + 11*EEBDTOT + 14*FEBDTOT + 17*GEBDTOT
+qua =~ 9*BEBDTOT + 25*CEBDTOT + 49*DDDEBDTOT + 121*EEBDTOT + 196*FEBDTOT + 289*GEBDTOT
+# GEBDTOT ~~ 1*GEBDTOT
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+fit_mcs_loose_agestr_ttl_adj_2 <- growth(mcs_loose_agestr_ttl_adj_2, data = asd_loose_SDQ, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_agestr_ttl_adj_2)
+# removed group = "grp_num" , 
+
+
+# cubic 
+
+
+mcs_loose_agestr_ttl_adj_3 <- "
+int =~ 1*BEBDTOT + 1*CEBDTOT + 1*DDDEBDTOT + 1*EEBDTOT + 1*FEBDTOT + 1*GEBDTOT
+slp =~ .3*BEBDTOT + .5*CEBDTOT + .7*DDDEBDTOT + 1.1*EEBDTOT + 1.4*FEBDTOT + 1.7*GEBDTOT
+qua =~ .09*BEBDTOT + .25*CEBDTOT + .49*DDDEBDTOT + 1.21*EEBDTOT + 1.96*FEBDTOT + 2.89*GEBDTOT
+cub =~ .027*BEBDTOT + .125*CEBDTOT + .343*DDDEBDTOT + 1.331*EEBDTOT + 2.744*FEBDTOT + 4.913*GEBDTOT
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+
+fit_mcs_loose_agestr_ttl_adj_3 <- growth(mcs_loose_agestr_ttl_adj_3, data = asd_loose_SDQ, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_loose_agestr_ttl_adj_2)
+
+
+
+
+## Growth Mixture Modelling
+
+
+library(lcmm)
+age <- c("3","5","7","11","14","17")
+mcs_ttl_gmm1_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =asd_loose_long_sdq_ttl)
+summary(mcs_ttl_gmm1_loose)
+
+
+mcs_ttl_gmm2_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = asd_loose_long_sdq_ttl, mixture = ~ Sweep,
+nwg=T, B = mcs_ttl_gmm1_loose)
+summary(mcs_ttl_gmm2_loose)
+
+
+
+mcs_ttl_gmm3_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = asd_loose_long_sdq_ttl, mixture = ~ Sweep,
+nwg=T, B = mcs_ttl_gmm1_loose)
+summary(mcs_ttl_gmm3_loose)
+
+mcs_ttl_gmm4_loose <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = asd_loose_long_sdq_ttl, mixture = ~ Sweep,
+nwg=T, B = mcs_ttl_gmm1_loose)
+summary(mcs_ttl_gmm4_loose)
+
+# make a table with results for the models:
+fit_ind <- summarytable(mcs_ttl_gmm1_loose, mcs_ttl_gmm2_loose,mcs_ttl_gmm3_loose,mcs_ttl_gmm4_loose,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+
+mcs_loose_ttl_people2 <- as.data.frame(mcs_ttl_gmm2_loose$pprob[,1:2])
+asd_loose_long_sdq_ttl <- merge(asd_loose_long_sdq_ttl,mcs_loose_ttl_people2, by = "numericID")
+
+asd_loose_long_sdq_ttl <- asd_loose_long_sdq_ttl %>% dplyr::mutate(Sweep.age = case_when(Sweep == 2 ~ 3, Sweep == 3 ~ 5, Sweep == 4 ~ 7, Sweep == 5 ~ 11, Sweep == 6 ~ 14, Sweep == 7 ~ 17 ))
+
+asd_loose_long_sdq_ttl$Sweep.age <- as.numeric(asd_loose_long_sdq_ttl$Sweep.age)
+asd_loose_long_sdq_ttl$class <- as.factor(asd_loose_long_sdq_ttl$class)
+
+##### The other subscales on imputed data had the same codes from MCS-expanded, thus omitted here for simplicity ###########
+
+
+# Create the mediation model
+
+model_1 <- "
+  # direct effects
+  diag.age ~ a*sex + b*cog.PC1 + c*eth + d*mad + e*es.PC1 + f*dep.PC1 + g*ttl2 + h*emo2 + i*con3 + j*hyp2 + k*peer2 + l*pro3
+  "
+
+fit_1 <- lavaan::sem(model_1, data = mcs_loose_gmm_covs_s)
+lavTech(fit_1, "rsquare", add.labels = T)
+summary(fit_1)
+
+# for one layer, using summary will encounter a bug, so using lavTech or lavInspect 
+# see https://github.com/yrosseel/lavaan/issues/290
+
+
+library(tidySEM)
+model_2 <- "
+
+  diag.age ~ s*sex + i*cog.PC1 + e*eth + m*mad + se*es.PC1 + de*dep.PC1 + t*ttl2 + em*emo2 + co*con3 + h*hyp2 + p*peer2 + pr*pro3
+
+  ttl2 ~ s1*sex +i1*cog.PC1+ e1*eth +m1*mad +se1*es.PC1 + de1*dep.PC1
+  emo2 ~ s2*sex +i2*cog.PC1+ e2*eth +m2*mad +se2*es.PC1 + de2*dep.PC1
+  con3 ~ s3*sex +i3*cog.PC1+ e3*eth +m3*mad +se3*es.PC1 + de3*dep.PC1
+  hyp2 ~ s4*sex +i4*cog.PC1+ e4*eth +m4*mad +se4*es.PC1 + de4*dep.PC1
+  peer2 ~ s5*sex +i5*cog.PC1+ e5*eth +m5*mad +se5*es.PC1 + de5*dep.PC1
+  pro3 ~ s6*sex +i6*cog.PC1+ e6*eth +m6*mad +se6*es.PC1 + de6*dep.PC1
+  
+  
+ indirect_ttl2 := i1*t  +de1*t+se1*t+m1*t +s1*t+ e1*t
+ indirect_emo2 := i2*em  +de2*em+se2*em+m2*em +s2*em+ e2*em
+ indirect_con3 := i3*co  +de3*co+se3*co+m3*co +s3*co+ e3*co
+ indirect_hyp2 := i4*h  +de4*h+se4*h+m4*h +s4*h+ e4*h
+ indirect_peer2 := i5*p  +de5*p+se5*p+m5*p +s5*p+ e5*p
+ indirect_pro3 := i6*pr  +de6*pr+se6*pr+m6*pr +s6*pr+ e6*pr
+ 
+direct := s + i + e +m + se + de
+total_indirect := indirect_ttl2 + indirect_emo2 + indirect_con3 + indirect_hyp2 + indirect_peer2 + indirect_pro3
+total := direct + total_indirect
+  
+"
+set.seed(060524)
+serial_mcs_fit <- lavaan::sem(model_2, data = mcs_loose_gmm_covs_s, se = "bootstrap",
+    missing = "fiml", bootstrap = 1000)
+serial_mcs_fit_sum <- lavaan::summary(serial_mcs_fit, standardized = TRUE, rsq = T,
+    fit = TRUE, ci = TRUE)
+serial_mcs_fit_ParEsts <- lavaan::parameterEstimates(serial_mcs_fit, boot.ci.type = "bca.simple",standardized = TRUE)
+serial_mcs_fit_sum
+serial_mcs_fit_ParEsts
+write.csv(serial_mcs_fit_ParEsts, file = "mcs_level2.csv")
