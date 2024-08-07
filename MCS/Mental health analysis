@@ -262,3 +262,35 @@ mcs_self_harm_mod_int <- glm(self_harm ~ ttl + Sex + ttl:Sex, data = mcs_asd_mh_
 mcs_self_harm_mod_intsum <- broom::tidy(mcs_self_harm_mod_int)
 mcs_self_harm_sum <- rbind(mcs_self_harm_modsum, mcs_self_harm_mod_intsum)
 mcs_self_harm_sum
+
+# logistic regression
+mcs_mh_mod <- glm(mh~ ttl + Sex, data = mcs_asd_mh, family = binomial)
+mcs_anx_modsum <- broom::tidy(mcs_mh_mod)
+mcs_mh_mod_int <- glm(mh~ ttl + Sex + ttl:Sex, data = mcs_asd_mh, family = binomial)
+mcs_mh_mod_intsum <- broom::tidy(mcs_mh_mod_int)
+
+mcs_mh_sum <- rbind(mcs_anx_modsum,mcs_mh_mod_intsum)
+mcs_mh_sum
+
+
+fit_mh <- lm(mh ~  Sex + ttl+emo+con+hyp + peer + pro + diag.age, data= mcs_asd_mh)
+summary(fit_mh)
+tab_model(fit_mh)
+
+fit_ks <- lm(KS ~  Sex + ttl+emo+con+hyp + peer + pro + diag.age, data= mcs_asd_mh)
+summary(fit_ks)
+
+fit_sui <- lm(GCSUIC00 ~  Sex + ttl+emo+con+hyp + peer + pro + diag.age, data= mcs_asd_mh)
+summary(fit_sui)
+
+tab_model(fit_sui)
+
+mcs_sui_mod <- glm(GCSUIC00~ ttl + Sex, data = mcs_asd_mh, family = binomial)
+mcs_sui_modsum <- broom::tidy(mcs_sui_mod)
+mcs_sui_mod_int <- glm(GCSUIC00~ ttl + Sex + ttl:Sex, data = mcs_asd_mh, family = binomial)
+mcs_sui_mod_intsum <- broom::tidy(mcs_sui_mod_int)
+
+mcs_sui_sum <- rbind(mcs_sui_modsum,mcs_sui_mod_intsum)
+mcs_sui_sum
+
+
