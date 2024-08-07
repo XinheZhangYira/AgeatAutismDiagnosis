@@ -1,0 +1,973 @@
+library(dplyr)
+library(tidyverse)
+library(data.table)
+library(lavaan)
+
+## Load data
+data <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/sftimp_data.csv") # from MCS expanded and imputation.Rmd
+data <- data[-1]
+data <- data[-which(names(data) == "data")]
+
+imp_data <- data %>% mutate(group = case_when(
+  diag.age %in% c(5,7,11) ~ "Early",
+  diag.age == 14 ~ "Late"
+)
+)
+imp_data <- imp_data %>% mutate(BEBDTOT = BEMOTION + BCONDUCT + BHYPER + BPEER) %>% mutate(CEBDTOT = CEMOTION + CCONDUCT + CHYPER + CPEER)%>% mutate(DDDEBDTOT = DDEMOTION + DDCONDUCT + DDHYPER + DDPEER)%>% mutate(EEBDTOT = EEMOTION + ECONDUCT + EHYPER + EPEER)%>% mutate(FEBDTOT = FEMOTION + FCONDUCT + FHYPER + FPEER)%>% mutate(GEBDTOT = GEMOTION + GCONDUCT + GHYPER + GPEER)
+
+
+
+
+
+# No diagnosis
+MCS_no_diag <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_control.csv") # 6047 in total
+MCS_no_diag$sex_num <- ifelse(MCS_no_diag$Sex == "Male", 1,2)
+MCS_no_diag$grp <- "no_diag"
+MCS_no_diag$grp_num <- 3
+MCS_sdq_no_diag <- MCS_no_diag[,c(1:21,34:39,22:33,40:45)]
+MCS_no_diag_sdq_ttl <- MCS_sdq_no_diag[,c(1,9,15,21,27,33,39,42)]
+
+## LGCM
+
+mod_imp_ttl <- "
+int =~ 1*BEBDTOT + 1*CEBDTOT + 1*DDDEBDTOT + 1*EEBDTOT + 1*FEBDTOT + 1*GEBDTOT
+slp =~ 3*BEBDTOT + 5*CEBDTOT + 7*DDDEBDTOT + 11*EEBDTOT + 14*FEBDTOT + 17*GEBDTOT
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+imp_ttl_fit <- growth(mod_imp_ttl, data = imp_data,  missing = "fiml", estimator = "ml", fixed.x = F)
+fit_imp_agestr_ttl <- growth(mod_imp_ttl, data = imp_data, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_imp_sexstr_tll <- growth(mod_imp_ttl, data = imp_data, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(fit_mcs_loose_complete_agestr_ttl)
+anova(fit_imp_agestr_ttl,imp_ttl_fit)
+anova(fit_imp_sexstr_tll,imp_ttl_fit)
+
+
+
+mod_imp_emo <- "
+int =~ 1*BEMOTION + 1*CEMOTION + 1*DDEMOTION + 1*EEMOTION + 1*FEMOTION + 1*GEMOTION
+slp =~ 3*BEMOTION + 5*CEMOTION + 7*DDEMOTION + 11*EEMOTION + 14*FEMOTION + 17*GEMOTION
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+
+fit_imp_agestr_emo <- growth(mod_imp_emo, data = imp_data, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_imp_sexstr_emo <- growth(mod_imp_emo, data = imp_data, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(fit_mcs_loose_complete_agestr_emo)
+
+
+mod_imp_con <- "
+int =~ 1*BCONDUCT + 1*CCONDUCT + 1*DDCONDUCT + 1*ECONDUCT + 1*FCONDUCT + 1*GCONDUCT
+slp =~ 3*BCONDUCT + 5*CCONDUCT + 7*DDCONDUCT + 11*ECONDUCT + 14*FCONDUCT + 17*GCONDUCT
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+
+fit_imp_agestr_con <- growth(mod_imp_con, data = imp_data, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_imp_sexstr_con <- growth(mod_imp_con, data = imp_data, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+
+#summary(fit_mcs_loose_complete_agestr_con)
+
+
+mod_imp_hyp <- "
+int =~ 1*BHYPER + 1*CHYPER + 1*DDHYPER + 1*EHYPER + 1*FHYPER + 1*GHYPER
+slp =~ 3*BHYPER + 5*CHYPER + 7*DDHYPER + 11*EHYPER + 14*FHYPER + 17*GHYPER
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+
+fit_imp_agestr_hyp <- growth(mod_imp_hyp, data = imp_data, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_imp_sexstr_hyp <- growth(mod_imp_hyp, data = imp_data, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+
+#summary(fit_mcs_loose_complete_agestr_hyp)
+
+
+
+
+mod_imp_peer <- "
+int =~ 1*BPEER + 1*CPEER + 1*DDPEER + 1*EPEER + 1*FPEER + 1*GPEER
+slp =~ 3*BPEER + 5*CPEER + 7*DDPEER + 11*EPEER + 14*FPEER + 17*GPEER
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+
+fit_imp_agestr_peer <- growth(mod_imp_peer, data = imp_data, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_imp_sexstr_peer <- growth(mod_imp_peer, data = imp_data, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_imp_agestr_peer)
+
+summary(fit_imp_sexstr_peer)
+
+
+
+
+mod_imp_pro <- "
+int =~ 1*BPROSOC + 1*CPROSOC + 1*DDPROSOC + 1*EPROSOC + 1*FPROSOC + 1*GPROSOC
+slp =~ 3*BPROSOC + 5*CPROSOC + 7*DDPROSOC + 11*EPROSOC + 14*FPROSOC + 17*GPROSOC
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+
+fit_imp_agestr_pro <- growth(mod_imp_pro, data = imp_data, group = "group", missing = "fiml", estimator = "ml", fixed.x = F)
+fit_imp_sexstr_pro <- growth(mod_imp_pro, data = imp_data, group = "sex", missing = "fiml", estimator = "ml", fixed.x = F)
+
+
+
+===================== Mean trajectories ==============================
+
+
+MCS_no_diag_sdq_ttl_long <- melt(setDT(MCS_no_diag_sdq_ttl), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_ttl_summary <- MCS_no_diag_sdq_ttl_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value),
+    ttl_mean = mean(value),
+    se = plotrix::std.error(value)
+  )
+MCS_no_diag_ttl_summary$group <- "no diag"
+
+# Emotional symptoms
+MCS_no_diag_sdq_emo <- MCS_sdq_no_diag[,c(1,4,10,16,22,28,34,42)]
+
+MCS_no_diag_sdq_emo_long <- melt(setDT(MCS_no_diag_sdq_emo), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_emo_summary <- MCS_no_diag_sdq_emo_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value),
+    emo_mean = mean(value),
+    se = plotrix::std.error(value)
+  )
+MCS_no_diag_emo_summary$group <- "no diag"
+
+# Conduct problems
+
+MCS_no_diag_sdq_con <- MCS_sdq_no_diag[,c(1,5,11,17,23,29,35,42)]
+
+MCS_no_diag_sdq_con_long <- melt(setDT(MCS_no_diag_sdq_con), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_con_summary <- MCS_no_diag_sdq_con_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value),
+    con_mean = mean(value),
+    se = plotrix::std.error(value)
+  )
+MCS_no_diag_con_summary$group <- "no diag"
+
+
+# Hyperactivity -inattention
+MCS_no_diag_sdq_hyp <- MCS_sdq_no_diag[,c(1,6,12,18,24,30,36,42)]
+
+MCS_no_diag_sdq_hyp_long <- melt(setDT(MCS_no_diag_sdq_hyp), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_hyp_summary <- MCS_no_diag_sdq_hyp_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value),
+    hyp_mean = mean(value),
+    se = plotrix::std.error(value)
+  )
+MCS_no_diag_hyp_summary$group <- "no diag"
+
+
+# Peer relationship problems
+MCS_no_diag_sdq_peer <- MCS_sdq_no_diag[,c(1,7,13,19,25,31,37,42)]
+
+MCS_no_diag_sdq_peer_long <- melt(setDT(MCS_no_diag_sdq_peer), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_peer_summary <- MCS_no_diag_sdq_peer_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value),
+    peer_mean = mean(value),
+    se = plotrix::std.error(value)
+  )
+MCS_no_diag_peer_summary$group <- "no diag"
+
+
+# Prosocial behaviour
+MCS_no_diag_sdq_pro <- MCS_sdq_no_diag[,c(1,8,14,20,26,32,38,42)]
+
+MCS_no_diag_sdq_pro_long <- melt(setDT(MCS_no_diag_sdq_pro), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_pro_summary <- MCS_no_diag_sdq_pro_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value),
+    pro_mean = mean(value),
+    se = plotrix::std.error(value)
+  )
+MCS_no_diag_pro_summary$group <- "no diag"
+
+
+# TTL
+
+# Early
+
+imp_early <- imp_data[imp_data$group == "Early",]
+imp_late <- imp_data[imp_data$group == "Late",]
+imp_early_ttl <- imp_early[,c(1,2,73:78)]
+
+imp_early_ttl_long <- data.table::melt(setDT(imp_early_ttl), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_early_ttl_summary <- imp_early_ttl_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    ttl_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_early_ttl_summary$group <- "early"
+
+
+# Late
+imp_late_ttl <- imp_late[,c(1,2,73:78)]
+
+imp_late_ttl_long <- melt(setDT(imp_late_ttl), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_late_ttl_summary <- imp_late_ttl_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    ttl_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_late_ttl_summary$group <- "late"
+
+
+
+imp_early_ttl_summary$lb = imp_early_ttl_summary$ttl_mean - 1.96*imp_early_ttl_summary$se
+imp_early_ttl_summary$ub = imp_early_ttl_summary$ttl_mean + 1.96*imp_early_ttl_summary$se
+imp_late_ttl_summary$lb = imp_late_ttl_summary$ttl_mean - 1.96*imp_late_ttl_summary$se
+imp_late_ttl_summary$ub = imp_late_ttl_summary$ttl_mean + 1.96*imp_late_ttl_summary$se
+MCS_no_diag_ttl_summary$lb = 
+  MCS_no_diag_ttl_summary$ttl_mean - 
+  1.96*MCS_no_diag_ttl_summary$se
+MCS_no_diag_ttl_summary$ub = 
+  MCS_no_diag_ttl_summary$ttl_mean + 
+  1.96*MCS_no_diag_ttl_summary$se
+mcs_imp_mean_full <- rbind(imp_early_ttl_summary, imp_late_ttl_summary,MCS_no_diag_ttl_summary)
+mcs_imp_mean_full <- mcs_imp_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BEBDTOT" ~ 3,
+  sweep == "CEBDTOT" ~ 5,
+  sweep == "DDDEBDTOT" ~ 7,
+   sweep == "EEBDTOT" ~ 11,
+   sweep == "FEBDTOT" ~ 14,
+   sweep == "GEBDTOT" ~ 17,
+))
+
+# emotional
+
+# Early
+
+imp_early <- imp_data[imp_data$group == "Early",]
+imp_late <- imp_data[imp_data$group == "Late",]
+imp_early_emo <- imp_early[,c(1,2,3,8,13,18,23,28)]
+
+imp_early_emo_long <- data.table::melt(setDT(imp_early_emo), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_early_emo_summary <- imp_early_emo_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    emo_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_early_emo_summary$group <- "early"
+
+
+# Late
+imp_late_emo <- imp_late[,c(1,2,3,8,13,18,23,28)]
+
+imp_late_emo_long <- melt(setDT(imp_late_emo), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_late_emo_summary <- imp_late_emo_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    emo_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_late_emo_summary$group <- "late"
+
+
+
+imp_early_emo_summary$lb = imp_early_emo_summary$emo_mean - 1.96*imp_early_emo_summary$se
+imp_early_emo_summary$ub = imp_early_emo_summary$emo_mean + 1.96*imp_early_emo_summary$se
+imp_late_emo_summary$lb = imp_late_emo_summary$emo_mean - 1.96*imp_late_emo_summary$se
+imp_late_emo_summary$ub = imp_late_emo_summary$emo_mean + 1.96*imp_late_emo_summary$se
+MCS_no_diag_emo_summary$lb = 
+  MCS_no_diag_emo_summary$emo_mean - 
+  1.96*MCS_no_diag_emo_summary$se
+MCS_no_diag_emo_summary$ub = 
+  MCS_no_diag_emo_summary$emo_mean + 
+  1.96*MCS_no_diag_emo_summary$se
+mcs_imp_mean_full <- rbind(imp_early_emo_summary, imp_late_emo_summary,MCS_no_diag_emo_summary)
+mcs_imp_mean_full <- mcs_imp_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BEMOTION" ~ 3,
+  sweep == "CEMOTION" ~ 5,
+  sweep == "DDEMOTION" ~ 7,
+   sweep == "EEMOTION" ~ 11,
+   sweep == "FEMOTION" ~ 14,
+   sweep == "GEMOTION" ~ 17,
+))
+
+
+# Conduct
+
+# Early
+
+imp_early <- imp_data[imp_data$group == "Early",]
+imp_late <- imp_data[imp_data$group == "Late",]
+imp_early_con <- imp_early[,c(1,2,4,9,14,19,24,29)]
+
+imp_early_con_long <- data.table::melt(setDT(imp_early_con), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_early_con_summary <- imp_early_con_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    con_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_early_con_summary$group <- "early"
+
+
+# Late
+imp_late_con <- imp_late[,c(1,2,4,9,14,19,24,29)]
+
+imp_late_con_long <- melt(setDT(imp_late_con), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_late_con_summary <- imp_late_con_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    con_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_late_con_summary$group <- "late"
+
+
+
+imp_early_con_summary$lb = imp_early_con_summary$con_mean - 1.96*imp_early_con_summary$se
+imp_early_con_summary$ub = imp_early_con_summary$con_mean + 1.96*imp_early_con_summary$se
+imp_late_con_summary$lb = imp_late_con_summary$con_mean - 1.96*imp_late_con_summary$se
+imp_late_con_summary$ub = imp_late_con_summary$con_mean + 1.96*imp_late_con_summary$se
+MCS_no_diag_con_summary$lb = 
+  MCS_no_diag_con_summary$con_mean - 
+  1.96*MCS_no_diag_con_summary$se
+MCS_no_diag_con_summary$ub = 
+  MCS_no_diag_con_summary$con_mean + 
+  1.96*MCS_no_diag_con_summary$se
+mcs_imp_mean_full <- rbind(imp_early_con_summary, imp_late_con_summary,MCS_no_diag_con_summary)
+mcs_imp_mean_full <- mcs_imp_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BCONDUCT" ~ 3,
+  sweep == "CCONDUCT" ~ 5,
+  sweep == "DDCONDUCT" ~ 7,
+   sweep == "ECONDUCT" ~ 11,
+   sweep == "FCONDUCT" ~ 14,
+   sweep == "GCONDUCT" ~ 17,
+))
+
+
+# Hyperactivity
+
+# Early
+
+imp_early <- imp_data[imp_data$group == "Early",]
+imp_late <- imp_data[imp_data$group == "Late",]
+imp_early_hyp <- imp_early[,c(1,2,5,10,15,20,25,30)]
+
+imp_early_hyp_long <- data.table::melt(setDT(imp_early_hyp), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_early_hyp_summary <- imp_early_hyp_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    hyp_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_early_hyp_summary$group <- "early"
+
+
+# Late
+imp_late_hyp <- imp_late[,c(1,2,5,10,15,20,25,30)]
+
+imp_late_hyp_long <- melt(setDT(imp_late_hyp), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_late_hyp_summary <- imp_late_hyp_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    hyp_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_late_hyp_summary$group <- "late"
+
+
+
+imp_early_hyp_summary$lb = imp_early_hyp_summary$hyp_mean - 1.96*imp_early_hyp_summary$se
+imp_early_hyp_summary$ub = imp_early_hyp_summary$hyp_mean + 1.96*imp_early_hyp_summary$se
+imp_late_hyp_summary$lb = imp_late_hyp_summary$hyp_mean - 1.96*imp_late_hyp_summary$se
+imp_late_hyp_summary$ub = imp_late_hyp_summary$hyp_mean + 1.96*imp_late_hyp_summary$se
+MCS_no_diag_hyp_summary$lb = 
+  MCS_no_diag_hyp_summary$hyp_mean - 
+  1.96*MCS_no_diag_hyp_summary$se
+MCS_no_diag_hyp_summary$ub = 
+  MCS_no_diag_hyp_summary$hyp_mean + 
+  1.96*MCS_no_diag_hyp_summary$se
+mcs_imp_mean_full <- rbind(imp_early_hyp_summary, imp_late_hyp_summary,MCS_no_diag_hyp_summary)
+mcs_imp_mean_full <- mcs_imp_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BHYPER" ~ 3,
+  sweep == "CHYPER" ~ 5,
+  sweep == "DDHYPER" ~ 7,
+   sweep == "EHYPER" ~ 11,
+   sweep == "FHYPER" ~ 14,
+   sweep == "GHYPER" ~ 17,
+))
+
+
+# Peer 
+
+# Early
+
+imp_early <- imp_data[imp_data$group == "Early",]
+imp_late <- imp_data[imp_data$group == "Late",]
+imp_early_peer <- imp_early[,c(1,2,6,11,16,21,26,31)]
+
+imp_early_peer_long <- data.table::melt(setDT(imp_early_peer), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_early_peer_summary <- imp_early_peer_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    peer_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_early_peer_summary$group <- "early"
+
+
+# Late
+imp_late_peer <- imp_late[,c(1,2,6,11,16,21,26,31)]
+
+imp_late_peer_long <- melt(setDT(imp_late_peer), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_late_peer_summary <- imp_late_peer_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    peer_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_late_peer_summary$group <- "late"
+
+
+
+imp_early_peer_summary$lb = imp_early_peer_summary$peer_mean - 1.96*imp_early_peer_summary$se
+imp_early_peer_summary$ub = imp_early_peer_summary$peer_mean + 1.96*imp_early_peer_summary$se
+imp_late_peer_summary$lb = imp_late_peer_summary$peer_mean - 1.96*imp_late_peer_summary$se
+imp_late_peer_summary$ub = imp_late_peer_summary$peer_mean + 1.96*imp_late_peer_summary$se
+MCS_no_diag_peer_summary$lb = 
+  MCS_no_diag_peer_summary$peer_mean - 
+  1.96*MCS_no_diag_peer_summary$se
+MCS_no_diag_peer_summary$ub = 
+  MCS_no_diag_peer_summary$peer_mean + 
+  1.96*MCS_no_diag_peer_summary$se
+mcs_imp_mean_full <- rbind(imp_early_peer_summary, imp_late_peer_summary,MCS_no_diag_peer_summary)
+mcs_imp_mean_full <- mcs_imp_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BPEER" ~ 3,
+  sweep == "CPEER" ~ 5,
+  sweep == "DDPEER" ~ 7,
+   sweep == "EPEER" ~ 11,
+   sweep == "FPEER" ~ 14,
+   sweep == "GPEER" ~ 17,
+))
+
+# Prosocial
+
+# Early
+
+imp_early <- imp_data[imp_data$group == "Early",]
+imp_late <- imp_data[imp_data$group == "Late",]
+imp_early_pro <- imp_early[,c(1,2,7,12,17,22,27,32)]
+
+imp_early_pro_long <- data.table::melt(setDT(imp_early_pro), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_early_pro_summary <- imp_early_pro_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    pro_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_early_pro_summary$group <- "early"
+
+
+# Late
+imp_late_pro <- imp_late[,c(1,2,7,12,17,22,27,32)]
+
+imp_late_pro_long <- melt(setDT(imp_late_pro), id.vars = c("cmid","sex"), variable.name = "sweep")
+
+imp_late_pro_summary <- imp_late_pro_long %>%
+   dplyr::group_by(sweep) %>%
+   dplyr::summarise(
+    sd = sd(value, na.rm = TRUE),
+    pro_mean = mean(value, na.rm = TRUE),
+    se = plotrix::std.error(value)
+  )
+imp_late_pro_summary$group <- "late"
+
+
+
+imp_early_pro_summary$lb = imp_early_pro_summary$pro_mean - 1.96*imp_early_pro_summary$se
+imp_early_pro_summary$ub = imp_early_pro_summary$pro_mean + 1.96*imp_early_pro_summary$se
+imp_late_pro_summary$lb = imp_late_pro_summary$pro_mean - 1.96*imp_late_pro_summary$se
+imp_late_pro_summary$ub = imp_late_pro_summary$pro_mean + 1.96*imp_late_pro_summary$se
+MCS_no_diag_pro_summary$lb = 
+  MCS_no_diag_pro_summary$pro_mean - 
+  1.96*MCS_no_diag_pro_summary$se
+MCS_no_diag_pro_summary$ub = 
+  MCS_no_diag_pro_summary$pro_mean + 
+  1.96*MCS_no_diag_pro_summary$se
+mcs_imp_mean_full <- rbind(imp_early_pro_summary, imp_late_pro_summary,MCS_no_diag_pro_summary)
+mcs_imp_mean_full <- mcs_imp_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BPROSOC" ~ 3,
+  sweep == "CPROSOC" ~ 5,
+  sweep == "DDPROSOC" ~ 7,
+   sweep == "EPROSOC" ~ 11,
+   sweep == "FPROSOC" ~ 14,
+   sweep == "GPROSOC" ~ 17,
+))
+
+========================================================================================
+library(lcmm)
+### Growth Mixture models
+
+imp_data <- dplyr::mutate(imp_data, numericID = row_number())
+imp_ttl_wide <- imp_data[,c("numericID","cmid","sex","diag.age","BEBDTOT","CEBDTOT", "DDDEBDTOT" ,"EEBDTOT","FEBDTOT","GEBDTOT")]
+imp_ttl_long <- melt(setDT(imp_ttl_wide), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+imp_ttl_long <- imp_ttl_long %>%
+  mutate(Sweep = case_when(
+    sweep == "BEBDTOT" ~ 2,
+    sweep == "CEBDTOT" ~ 3,
+    sweep == "DDDEBDTOT" ~ 4,
+    sweep == "EEBDTOT" ~ 5,
+    sweep == "FEBDTOT" ~ 6,
+    sweep == "GEBDTOT" ~ 7)
+    )
+
+
+imp_emo_wide <- imp_data[,c("numericID","cmid","sex","diag.age","BEMOTION","CEMOTION", "DDEMOTION","EEMOTION","FEMOTION","GEMOTION")]
+imp_emo_long <- melt(setDT(imp_emo_wide), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+imp_emo_long <- imp_emo_long %>%
+  mutate(Sweep = case_when(
+    sweep == "BEMOTION" ~ 2,
+    sweep == "CEMOTION" ~ 3,
+    sweep == "DDEMOTION" ~ 4,
+    sweep == "EEMOTION" ~ 5,
+    sweep == "FEMOTION" ~ 6,
+    sweep == "GEMOTION" ~ 7)
+    )
+
+
+imp_con_wide <- imp_data[,c("numericID","cmid","sex","diag.age","BCONDUCT","CCONDUCT","DDCONDUCT","ECONDUCT","FCONDUCT","GCONDUCT")]
+imp_con_long <- melt(setDT(imp_con_wide), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+imp_con_long <- imp_con_long %>%
+  mutate(Sweep = case_when(
+    sweep == "BCONDUCT" ~ 2,
+    sweep == "CCONDUCT" ~ 3,
+    sweep == "DDCONDUCT" ~ 4,
+    sweep == "ECONDUCT" ~ 5,
+    sweep == "FCONDUCT" ~ 6,
+    sweep == "GCONDUCT" ~ 7)
+    )
+
+
+imp_hyp_wide <- imp_data[,c("numericID","cmid","sex","diag.age","BHYPER","CHYPER","DDHYPER","EHYPER","FHYPER","GHYPER")]
+imp_hyp_long <- melt(setDT(imp_hyp_wide), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+imp_hyp_long <- imp_hyp_long %>%
+  mutate(Sweep = case_when(
+    sweep == "BHYPER" ~ 2,
+    sweep == "CHYPER" ~ 3,
+    sweep == "DDHYPER" ~ 4,
+    sweep == "EHYPER" ~ 5,
+    sweep == "FHYPER" ~ 6,
+    sweep == "GHYPER" ~ 7)
+    )
+
+
+imp_peer_wide <- imp_data[,c("numericID","cmid","sex","diag.age","BPEER","CPEER","DDPEER","EPEER","FPEER","GPEER")]
+imp_peer_long <- melt(setDT(imp_peer_wide), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+imp_peer_long <- imp_peer_long %>%
+  mutate(Sweep = case_when(
+    sweep == "BPEER" ~ 2,
+    sweep == "CPEER" ~ 3,
+    sweep == "DDPEER" ~ 4,
+    sweep == "EPEER" ~ 5,
+    sweep == "FPEER" ~ 6,
+    sweep == "GPEER" ~ 7)
+    )
+
+
+imp_pro_wide <- imp_data[,c("numericID","cmid","sex","diag.age","BPROSOC","CPROSOC","DDPROSOC","EPROSOC","FPROSOC","GPROSOC")]
+imp_pro_long <- melt(setDT(imp_pro_wide), id.vars = c("numericID","cmid","sex","diag.age"), variable.name = "sweep")
+imp_pro_long <- imp_pro_long %>%
+  mutate(Sweep = case_when(
+    sweep == "BPROSOC" ~ 2,
+    sweep == "CPROSOC" ~ 3,
+    sweep == "DDPROSOC" ~ 4,
+    sweep == "EPROSOC" ~ 5,
+    sweep == "FPROSOC" ~ 6,
+    sweep == "GPROSOC" ~ 7)
+    )
+age <- c("3","5","7","11","14","17")
+
+
+# GMM
+## Total
+
+
+imp_ttl_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+imp_ttl_long)
+summary(imp_ttl_gmm1)
+
+
+imp_ttl_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = imp_ttl_long, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = imp_ttl_gmm1)
+summary(imp_ttl_gmm2)
+
+
+imp_ttl_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = imp_ttl_long, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = imp_ttl_gmm1)
+summary(imp_ttl_gmm3)
+
+
+imp_ttl_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = imp_ttl_long, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = imp_ttl_gmm1)
+summary(imp_ttl_gmm4)
+imp_fit_ind_ttl <- summarytable(imp_ttl_gmm1, imp_ttl_gmm2, imp_ttl_gmm3, imp_ttl_gmm4,which = c("AIC","BIC","SABIC","entropy","%class","npm","loglik"))
+
+ 
+#fit_ind <- summarytable(imp_ttl_gmm1, imp_ttl_gmm2, imp_ttl_gmm3)
+
+
+
+imp_ttl_long$numericID <- as.character(imp_ttl_long$numericID)
+imp_ttl_people2 <- as.data.frame(imp_ttl_gmm2$pprob[,1:2])
+imp_ttl_long$class <- factor(imp_ttl_people2$class[sapply(imp_ttl_long$numericID, function(x) which(imp_ttl_people2$numericID==x))])
+
+
+
+## Emotional symptoms
+
+
+imp_emo_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+imp_emo_long)
+summary(imp_emo_gmm1)
+
+
+imp_emo_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = imp_emo_long, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = imp_emo_gmm1)
+summary(imp_emo_gmm2)
+
+
+imp_emo_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = imp_emo_long, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = imp_emo_gmm1)
+summary(imp_emo_gmm3)
+
+
+imp_emo_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = imp_emo_long, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = imp_emo_gmm1)
+summary(imp_emo_gmm4)
+imp_emo_gmm5 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 5, data = imp_emo_long, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = imp_emo_gmm1)
+#summary(imp_emo_gmm5)
+imp_fit_ind_emo <- summarytable(imp_emo_gmm1, imp_emo_gmm2, imp_emo_gmm3, imp_emo_gmm4,imp_emo_gmm5,which = c("AIC","BIC","SABIC","entropy","%class","npm","loglik"))
+
+ 
+#fit_ind <- summarytable(imp_emo_gmm1, imp_emo_gmm2, imp_emo_gmm3)
+
+
+
+
+
+imp_emo_long$numericID <- as.character(imp_emo_long$numericID)
+imp_emo_people2 <- as.data.frame(imp_emo_gmm2$pprob[,1:2])
+imp_emo_people3 <- as.data.frame(imp_emo_gmm3$pprob[,1:2])
+imp_emo_people4 <- as.data.frame(imp_emo_gmm4$pprob[,1:2])
+imp_emo_long$class <- factor(imp_emo_people2$class[sapply(imp_emo_long$numericID, function(x) which(imp_emo_people2$numericID==x))])
+imp_emo_long$class3 <- factor(imp_emo_people3$class[sapply(imp_emo_long$numericID, function(x) which(imp_emo_people3$numericID==x))])
+imp_emo_long$class4 <- factor(imp_emo_people4$class[sapply(imp_emo_long$numericID, function(x) which(imp_emo_people4$numericID==x))])
+
+
+
+## Conduct problems
+
+
+imp_con_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+imp_con_long)
+summary(imp_con_gmm1)
+
+
+imp_con_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = imp_con_long, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = imp_con_gmm1)
+summary(imp_con_gmm2)
+
+
+imp_con_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = imp_con_long, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = imp_con_gmm1)
+summary(imp_con_gmm3)
+
+
+imp_con_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = imp_con_long, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = imp_con_gmm1)
+#summary(imp_con_gmm4)
+
+imp_con_gmm5 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 5, data = imp_con_long, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = imp_con_gmm1)
+#summary(imp_con_gmm5)
+imp_fit_ind_con <- summarytable(imp_con_gmm1, imp_con_gmm2, imp_con_gmm3, imp_con_gmm4,imp_con_gmm5,which = c("AIC","BIC","SABIC","entropy","%class","npm","loglik"))
+
+ 
+#fit_ind <- summarytable(imp_con_gmm1, imp_con_gmm2, imp_con_gmm3)
+
+
+
+imp_con_long$numericID <- as.character(imp_con_long$numericID)
+imp_con_people2 <- as.data.frame(imp_con_gmm2$pprob[,1:2])
+imp_con_people3 <- as.data.frame(imp_con_gmm3$pprob[,1:2])
+imp_con_long$class <- factor(imp_con_people2$class[sapply(imp_con_long$numericID, function(x) which(imp_con_people2$numericID==x))])
+imp_con_long$class3 <- factor(imp_con_people3$class[sapply(imp_con_long$numericID, function(x) which(imp_con_people3$numericID==x))])
+
+
+## Hyperactivity/Inattention
+
+
+imp_hyp_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+imp_hyp_long)
+summary(imp_hyp_gmm1)
+
+
+imp_hyp_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = imp_hyp_long, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = imp_hyp_gmm1)
+summary(imp_hyp_gmm2)
+
+
+imp_hyp_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = imp_hyp_long, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = imp_hyp_gmm1)
+summary(imp_hyp_gmm3)
+
+
+imp_hyp_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = imp_hyp_long, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = imp_hyp_gmm1)
+summary(imp_hyp_gmm4)
+imp_fit_ind_hyp <- summarytable(imp_hyp_gmm1, imp_hyp_gmm2, imp_hyp_gmm3, imp_hyp_gmm4,which = c("AIC","BIC","SABIC","entropy","%class","npm","loglik"))
+
+ 
+#fit_ind <- summarytable(imp_hyp_gmm1, imp_hyp_gmm2, imp_hyp_gmm3)
+
+
+
+imp_hyp_long$numericID <- as.character(imp_hyp_long$numericID)
+imp_hyp_people2 <- as.data.frame(imp_hyp_gmm2$pprob[,1:2])
+imp_hyp_long$class <- factor(imp_hyp_people2$class[sapply(imp_hyp_long$numericID, function(x) which(imp_hyp_people2$numericID==x))])
+
+
+
+## Peer relationship problems
+
+
+imp_peer_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data = imp_peer_long)
+summary(imp_peer_gmm1)
+
+
+imp_peer_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = imp_peer_long, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = imp_peer_gmm1)
+summary(imp_peer_gmm2)
+
+
+imp_peer_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = imp_peer_long, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = imp_peer_gmm1)
+summary(imp_peer_gmm3)
+
+
+imp_peer_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = imp_peer_long, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = imp_peer_gmm1)
+summary(imp_peer_gmm4)
+imp_fit_ind_peer <- summarytable(imp_peer_gmm1, imp_peer_gmm2, imp_peer_gmm3, imp_peer_gmm4,which = c("AIC","BIC","SABIC","entropy","%class","npm","loglik"))
+
+ 
+#fit_ind <- summarytable(imp_peer_gmm1, imp_peer_gmm2, imp_peer_gmm3)
+
+
+
+imp_peer_long$numericID <- as.character(imp_peer_long$numericID)
+imp_peer_people2 <- as.data.frame(imp_peer_gmm2$pprob[,1:2])
+imp_peer_people3 <- as.data.frame(imp_peer_gmm3$pprob[,1:2])
+imp_peer_long$class <- factor(imp_peer_people2$class[sapply(imp_peer_long$numericID, function(x) which(imp_peer_people2$numericID==x))])
+imp_peer_long$class3 <- factor(imp_peer_people3$class[sapply(imp_peer_long$numericID, function(x) which(imp_peer_people3$numericID==x))])
+
+
+
+
+## Prosocial behaviours
+
+imp_pro_long$numericID <- as.numeric(imp_pro_long$numericID)
+imp_pro_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data = imp_pro_long)
+summary(imp_pro_gmm1)
+
+
+imp_pro_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = imp_pro_long, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = imp_pro_gmm1)
+summary(imp_pro_gmm2)
+
+
+imp_pro_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = imp_pro_long, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = imp_pro_gmm1)
+summary(imp_pro_gmm3)
+
+
+imp_pro_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = imp_pro_long, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = imp_pro_gmm1)
+summary(imp_pro_gmm4)
+
+imp_pro_gmm5 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 5, data = imp_pro_long, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = imp_pro_gmm1)
+summary(imp_pro_gmm5)
+
+
+imp_pro_gmm5 <- hlme(value ~ Sweep, subject = "numericID", random=~ 1,ng = 5,data = imp_pro_long, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = imp_pro_gmm1)
+summary(imp_pro_gmm5)
+
+imp_fit_ind_pro <- summarytable(imp_pro_gmm1, imp_pro_gmm2, imp_pro_gmm3, imp_pro_gmm4,imp_pro_gmm5,which = c("AIC","BIC","SABIC","entropy","%class","npm","loglik"))
+
+
+
+my_colors <- brewer.pal(12, "Paired")[c(4,10)]
+my_colors3_pro <- brewer.pal(12,"Paired")[c(2,10,4)]
+my_colors4_pro <- brewer.pal(12, "Paired")[c(8,4,10,2)]
+imp_pro_long$numericID <- as.character(imp_pro_long$numericID)
+imp_pro_people2 <- as.data.frame(imp_pro_gmm2$pprob[,1:2])
+imp_pro_long$class <- factor(imp_pro_people2$class[sapply(imp_pro_long$numericID, function(x) which(imp_pro_people2$numericID==x))])
+imp_pro_people3 <- as.data.frame(imp_pro_gmm3$pprob[,1:2])
+imp_pro_long$class3 <- factor(imp_pro_people3$class[sapply(imp_pro_long$numericID, function(x) which(imp_pro_people3$numericID==x))])
+
+
+
+
+
+====================================================================
+library(tidySEM)
+library(lavaan)
+#  Mediation analysis
+## DATA 
+
+# file required "MCS cognitive aptitude.Rmd","MCS ses and deprivation.Rmd"
+
+imp_ttl_wide$numericID <- as.character(imp_ttl_wide$numericID)
+imp_ttl_people2$numericID <- as.character(imp_ttl_people2$numericID)
+imp_emo_people2$numericID <- as.character(imp_emo_people2$numericID)
+imp_con_people2$numericID <- as.character(imp_con_people2$numericID)
+imp_hyp_people2$numericID <- as.character(imp_hyp_people2$numericID)
+imp_peer_people2$numericID <- as.character(imp_peer_people2$numericID)
+imp_pro_people2$numericID <- as.character(imp_pro_people2$numericID)
+imp_emo_people4$numericID <- as.character(imp_emo_people4$numericID)
+imp_emo_people3$numericID <- as.character(imp_emo_people3$numericID)
+imp_con_people3$numericID <- as.character(imp_con_people3$numericID)
+imp_peer_people3$numericID <- as.character(imp_peer_people3$numericID)
+imp_pro_people3$numericID <- as.character(imp_pro_people3$numericID)
+imp_pro_people4$numericID <- as.character(imp_pro_people4$numericID)
+imp_grp_df <- list(imp_ttl_wide[,c("numericID","diag.age","sex")], imp_ttl_people2,imp_emo_people2,imp_con_people2,imp_hyp_people2,imp_peer_people2,imp_pro_people2,imp_emo_people3,imp_emo_people4,imp_con_people3,imp_peer_people3,imp_pro_people3,imp_pro_people4)
+
+imp_group_membership <- imp_grp_df %>% reduce(full_join, by= 'numericID') 
+
+colnames(imp_group_membership)[4:15] <- c("ttl","emo","con","hyp","peer","pro","emo3","emo4","con3","peer3","pro3","pro4")
+
+imp_group_membership <- cbind(imp_data$cmid, imp_group_membership)
+names(imp_group_membership)[1] <- "cmid"
+
+
+
+imp_grp_IQ <- merge(imp_group_membership, imp_asd_IQ, by = "cmid")
+
+imp_grp_IQ$MCSID <- substr(imp_grp_IQ$cmid, 1, nchar(imp_grp_IQ$cmid) - 1)
+imp_data$MCSID <- substr(imp_data$cmid,1,nchar(imp_data$cmid) - 1)
+imp_grp_ses <- merge(imp_grp_IQ, imp_asd_ses, by = "MCSID")
+imp_grp_dep <- merge(imp_grp_ses, imp_asd_dep, by = "MCSID", all = T) 
+
+
+imp_grp_tip <- merge(imp_data[,c("cmid","eth","mad","ccountry")], imp_grp_dep, by = "cmid") %>% na.omit()
+
+
+# Regression
+
+# code any non-whit as ethnic minority == 1
+imp_grp_tip$eth_m <- ifelse(imp_grp_tip$eth == 1, 0,1)
+imp_grp_tip <- unique(imp_grp_tip)
+fit_all_imp <- lm(diag.age ~ sex + IQ  + mad + ses + dep + ttl + emo + con + hyp + peer + pro + eth_m, data= imp_grp_tip)
+sjPlot::tab_model(fit_all_imp)
+vif(fit_all_imp)
+fit_all_imp_opt <- lm(diag.age ~ sex + IQ  + eth_m + mad + ses + dep + ttl + emo4 + con3 + hyp + peer3 + pro4 , data= imp_grp_tip)
+summary(fit_all_imp_opt)
+sjPlot::tab_model(fit_all_imp_opt)
+vif(fit_all_opt)
+
+# compared R^2 and the imp_grp_tip fit the data better
+
+
+
+model_imp_1 <- "
+  # direct effects
+  diag.age ~ sex + IQ  + mad + ses + dep + ttl + emo + con + hyp + peer + pro + eth_m"
+
+imp_fit_1 <- lavaan::sem(model_imp_1, data = imp_grp_tip)
+
+mcs_imp_fit_cor <- lavInspect(imp_fit_1, what = "cor.all")
+misty::dominance.manual(mcs_imp_fit_cor)
+
+lavTech(imp_fit_1, "rsquare", add.labels = T)
+
+
+
+mcs_i_model_2 <- "
+
+  diag.age ~ s*sex + i*IQ + e*eth_m + m*mad + se*ses + de*dep + t*ttl + em*emo + co*con + h*hyp + p*peer + pr*pro
+
+  ttl ~ i1*IQ + de1*dep + se1*ses + m1*mad + s1*sex + e1*eth_m
+  emo ~ i2*IQ + de2*dep + se2*ses + m2*mad + s2*sex + e2*eth_m
+  con ~ i3*IQ + de3*dep + se3*ses + m3*mad + s3*sex + e3*eth_m
+  hyp ~ i4*IQ + de4*dep + se4*ses + m4*mad + s4*sex+ e4*eth_m
+  peer ~ i5*IQ + de5*dep + se5*ses + m5*mad + s5*sex+ e5*eth_m
+  pro ~ i6*IQ + de6*dep + se6*ses + m6*mad + s6*sex+ e6*eth_m
+  
+  
+ indirect_ttl := i1*t  +de1*t+se1*t+m1*t +s1*t+ e1*t
+ indirect_emo := i2*em  +de2*em+se2*em+m2*em +s2*em+ e2*em
+ indirect_con := i3*co  +de3*co+se3*co+m3*co +s3*co+ e3*co
+ indirect_hyp := i4*h  +de4*h+se4*h+m4*h +s4*h+ e4*h
+ indirect_peer := i5*p  +de5*p+se5*p+m5*p +s5*p+ e5*p
+ indirect_pro := i6*pr  +de6*pr+se6*pr+m6*pr +s6*pr+ e6*pr
+ 
+direct := s + i + e +m + se + de
+total_indirect := indirect_ttl + indirect_emo + indirect_con + indirect_hyp + indirect_peer + indirect_pro
+total := direct + total_indirect
+  
+"
+set.seed(060524)
+serial_mcsi_fit <- lavaan::sem(mcs_i_model_2, data = imp_grp_tip, se = "bootstrap",missing = "fiml", bootstrap = 1000)
+serial_mcsi_fit_sum <- lavaan::summary(serial_mcsi_fit, standardized = TRUE, rsq = T,
+    fit = TRUE, ci = TRUE)
+serial_mcsi_fit_ParEsts <- lavaan::parameterEstimates(serial_mcsi_fit, boot.ci.type = "bca.simple",standardized = TRUE)
+serial_mcsi_fit_sum
+serial_mcsi_fit_ParEsts
+write.csv(serial_mcsi_fit_ParEsts, file = "mcsi_level2.csv")
