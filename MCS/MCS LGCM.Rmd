@@ -1,0 +1,337 @@
+
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(data.table)
+library(tidyverse)
+library(lavaan)
+
+
+## Data
+# Load prepared data
+
+MCS_autism <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_autism.csv") # 188 in total
+MCS_sdq_autism <- MCS_autism[,c(1:21,34:39,22:33,40:45)]
+MCS_sdq_autism$sex_num <- ifelse(MCS_sdq_autism$Sex =="Male", 1, 2)
+MCS_no_diag <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_control.csv") # 6047 in total
+MCS_no_diag$sex_num <- ifelse(MCS_no_diag$Sex == "Male", 1,2)
+MCS_no_diag$grp <- "no_diag"
+MCS_no_diag$grp_num <- 3
+MCS_sdq_no_diag <- MCS_no_diag[,c(1:21,34:39,22:33,40:45)]
+
+
+## Autism
+# Reshape data to plot-ready form
+```{r}
+# Group autstic group according to their diagnosis age
+# Though some parents provided specific diagnosis age in years, to conform to analysis in other cohorts so that cross-population comparisons could be allowed in the future
+# "Early" = first reported diagnosis at w3 (age5) or w4 (age7)
+# "Late = first reported diagnosis at w5 (age11) or w6 (age14)
+
+
+MCS_sdq_autism_early <- MCS_sdq_autism %>% filter (ASD.Diagnosis.Age %in% c("at W3","at W4","at W5")) # n = 118
+MCS_sdq_autism_late <- MCS_sdq_autism %>% filter (ASD.Diagnosis.Age %in% c("at W6")) # n = 70
+MCS_sdq_autism$grp <- ifelse(MCS_sdq_autism$ASD.Diagnosis.Age %in% c("at W3","at W4","at W5"), "Early", ifelse(MCS_sdq_autism$ASD.Diagnosis.Age %in% c("at W6"), "Late", NA))
+MCS_sdq_autism$grp_num <- ifelse(MCS_sdq_autism$ASD.Diagnosis.Age %in% c("at W3","at W4","at W5"), 1, ifelse(MCS_sdq_autism$ASD.Diagnosis.Age %in% c("at W6"), 2, NA))
+MCS_sdq_all <- rbind(MCS_no_diag,MCS_sdq_autism)
+
+
+
+
+## linear LGCM 
+
+
+mcs_autism_ttl_adj <- "
+int =~ 1*BEBDTOT + 1*CEBDTOT + 1*DDDEBDTOT + 1*EEBDTOT + 1*FEBDTOT + 1*GEBDTOT
+slp =~ 3*BEBDTOT + 5*CEBDTOT + 7*DDDEBDTOT + 11*EEBDTOT + 14*FEBDTOT + 17*GEBDTOT
+int ~ sex_num + grp_num
+slp ~ sex_num + grp_num
+sex_num ~~ sex_num
+grp_num ~~ grp_num
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+fit_mcs_autism_ttl_adj <- growth(mcs_autism_ttl_adj, data = MCS_sdq_autism,  missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_autism_ttl_adj)
+
+# Total 
+mcs_agestr_ttl_adj <- "
+int =~ 1*BEBDTOT + 1*CEBDTOT + 1*DDDEBDTOT + 1*EEBDTOT + 1*FEBDTOT + 1*GEBDTOT
+slp =~ 3*BEBDTOT + 5*CEBDTOT + 7*DDDEBDTOT + 11*EEBDTOT + 14*FEBDTOT + 17*GEBDTOT
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+fit_mcs_autism_ttl_adj <- growth(mcs_agestr_ttl_adj, data = MCS_sdq_autism, missing = "fiml", estimator = "ml", fixed.x = F) # investigate the overall fit of the autistic sample
+#summary(fit_mcs_autism_ttl_adj)
+mcs_agestr_ttl_fit_adj_all <- growth(mcs_agestr_ttl_adj, data = MCS_sdq_all, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+summary(mcs_agestr_ttl_fit_adj_all) 
+mcs_sexstr_ttl_fit_adj <- growth(mcs_agestr_ttl_adj, data = MCS_sdq_autism, group = "Sex",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_ttl_fit_adj) # stratified by sex
+mcs_agestr_ttl_fit_adj <- growth(mcs_agestr_ttl_adj, data = MCS_sdq_autism, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_ttl_fit_adj) # startified by age at diagnosis group 
+
+# Compare age-stratified and sex-stratified models
+anova_ttl_age <- anova(fit_mcs_autism_ttl_adj,mcs_agestr_ttl_fit_adj)
+anova_ttl_sex <- anova(fit_mcs_autism_ttl_adj,mcs_sexstr_ttl_fit_adj)
+
+=============== Calculate z-scores to test for the significance of differences between groups=================
+# Extract intercepts for two groups
+intercept_early <- est_mcs_agestr_ttl_fit_adj %>% filter(lhs == "int" & group == 3) %>% select(est, se, z)
+intercept_late <- est_mcs_agestr_ttl_fit_adj %>% filter(lhs == "int" & group == 2) %>% select(est, se, z)
+
+# Calculate the z-score for the difference between two groups
+mean_early <- intercept_early$est
+se_early <- intercept_early$se
+
+mean_late <- intercept_late$est
+se_late <- intercept_late$se
+
+z_score <- (mean_early - mean_late) / sqrt(se_early^2 + se_late^2)
+
+
+# Calculate two-tailed p-value
+p_value <- 2 * (1 - pnorm(abs(z_score)))
+
+
+# Extract slopes for two groups
+slope_early <- est_mcs_agestr_ttl_fit_adj %>% filter(lhs == "slp" & group == 3) %>% select(est, se, z)
+slope_late <- est_mcs_agestr_ttl_fit_adj %>% filter(lhs == "slp" & group == 2) %>% select(est, se, z)
+
+# Calculate the z-score for the difference between two groups
+slp_mean_early <- slope_early$est
+slp_se_early <- slope_early$se
+
+slp_mean_late <- slope_late$est
+slp_se_late <- slope_late$se
+
+slp_z_score <- (slp_mean_early - slp_mean_late) / sqrt(slp_se_early^2 + slp_se_late^2)
+# Calculate two-tailed p-value
+slp_p_value <- 2 * (1 - pnorm(abs(slp_z_score)))
+
+cat("Z-score for intercepts:", z_score, "\n")
+cat("P-value for intercepts:", p_value, "\n")
+cat("Z-score for slopes:", slp_z_score, "\n")
+cat("P-value for slopes:", p_value, "\n")
+============================The calculation for other subscales were done directly on spreadsheets, 
+codes will not be specified in this repository ============================================
+
+
+
+## Emotional symptoms
+
+# sex -stratified
+mcs_sexstr_emo_adj <- "
+int =~ 1*BEMOTION + 1*CEMOTION + 1*DDEMOTION + 1*EEMOTION + 1*FEMOTION + 1*GEMOTION
+slp =~ 3*BEMOTION + 5*CEMOTION + 7*DDEMOTION + 11*EEMOTION + 14*FEMOTION + 17*GEMOTION
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+fit_mcs_autism_emo_adj <- growth(mcs_sexstr_emo_adj, data = MCS_sdq_autism, missing = "fiml", estimator = "ml", fixed.x = F) # investigate the overall fit of the autistic sample
+#summary(fit_mcs_autism_emo_adj)
+mcs_agestr_emo_fit_adj_all <- growth(mcs_sexstr_emo_adj, data = MCS_sdq_all, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_emo_fit_adj_all) # startified by age at diagnosis group, as well as no diagnosis group
+mcs_sexstr_emo_fit_adj <- growth(mcs_sexstr_emo_adj, data = MCS_sdq_autism, group = "Sex",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_sexstr_emo_fit_adj) # stratified by sex
+mcs_agestr_emo_fit_adj <- growth(mcs_sexstr_emo_adj, data = MCS_sdq_autism, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_emo_fit_adj) # startified by age at diagnosis group 
+
+# Compare age-stratified and sex-stratified models
+anova_emo_age <- anova(fit_mcs_autism_emo_adj,mcs_agestr_emo_fit_adj)
+anova_emo_sex <- anova(fit_mcs_autism_emo_adj,mcs_sexstr_emo_fit_adj)
+
+
+
+## Conduct problems
+
+mcs_agestr_con_adj <- "
+int =~ 1*BCONDUCT + 1*CCONDUCT + 1*DDCONDUCT + 1*ECONDUCT + 1*FCONDUCT + 1*GCONDUCT
+slp =~ 3*BCONDUCT + 5*CCONDUCT + 7*DDCONDUCT + 11*ECONDUCT + 14*FCONDUCT + 17*GCONDUCT
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+mcs_agestr_con_fit_adj <- growth(mcs_agestr_con_adj, data = MCS_sdq_all, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_con_fit_adj)
+
+
+mcs_sexstr_con_adj <- "
+int =~ 1*BCONDUCT + 1*CCONDUCT + 1*DDCONDUCT + 1*ECONDUCT + 1*FCONDUCT + 1*GCONDUCT
+slp =~ 3*BCONDUCT + 5*CCONDUCT + 7*DDCONDUCT + 11*ECONDUCT + 14*FCONDUCT + 17*GCONDUCT
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+mcs_sexstr_con_fit_adj <- growth(mcs_sexstr_con_adj, data = MCS_sdq_autism, group = "sex",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_sexstr_con_fit_adj)
+fit_mcs_autism_con_adj <- growth(mcs_sexstr_con_adj, data = MCS_sdq_autism, missing = "fiml", estimator = "ml", fixed.x = F)
+mcs_agestr_con_fit_adj_asd <- growth(mcs_sexstr_con_adj, data = MCS_sdq_autism, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+
+anova_con_age <- anova(fit_mcs_autism_con_adj,mcs_agestr_con_fit_adj_asd)
+anova_con_sex <- anova(fit_mcs_autism_con_adj,mcs_sexstr_con_fit_adj)
+
+
+## Hyperactivity -Inattention
+
+
+mcs_agestr_hyp_adj <- "
+int =~ 1*BHYPER + 1*CHYPER + 1*DDHYPER + 1*EHYPER + 1*FHYPER + 1*GHYPER
+slp =~ 3*BHYPER + 5*CHYPER + 7*DDHYPER + 11*EHYPER + 14*FHYPER + 17*GHYPER
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+mcs_agestr_hyp_fit_adj <- growth(mcs_agestr_hyp_adj, data = MCS_sdq_all, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_hyp_fit_adj)
+
+mcs_sexstr_hyp_adj <- "
+int =~ 1*BHYPER + 1*CHYPER + 1*DDHYPER + 1*EHYPER + 1*FHYPER + 1*GHYPER
+slp =~ 3*BHYPER + 5*CHYPER + 7*DDHYPER + 11*EHYPER + 14*FHYPER + 17*GHYPER
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+mcs_sexstr_hyp_fit_adj <- growth(mcs_sexstr_hyp_adj, data = MCS_sdq_autism, group = "sex",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_sexstr_hyp_fit_adj)
+fit_mcs_autism_hyp_adj <- growth(mcs_sexstr_hyp_adj, data = MCS_sdq_autism, missing = "fiml", estimator = "ml", fixed.x = F)
+mcs_agestr_hyp_fit_adj_asd <- growth(mcs_sexstr_hyp_adj, data = MCS_sdq_autism, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+
+anova_hyp_age <- anova(fit_mcs_autism_hyp_adj,mcs_agestr_hyp_fit_adj_asd)
+anova_hyp_sex <- anova(fit_mcs_autism_hyp_adj,mcs_sexstr_hyp_fit_adj)
+
+
+
+
+## Peer relationship problems
+
+mcs_agestr_peer_adj <- "
+int =~ 1*BPEER + 1*CPEER + 1*DDPEER + 1*EPEER + 1*FPEER + 1*GPEER
+slp =~ 3*BPEER + 5*CPEER + 7*DDPEER + 11*EPEER + 14*FPEER + 17*GPEER
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+mcs_agestr_peer_fit_adj <- growth(mcs_agestr_peer_adj, data = MCS_sdq_all, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_peer_fit_adj)
+
+mcs_sexstr_peer_adj <- "
+int =~ 1*BPEER + 1*CPEER + 1*DDPEER + 1*EPEER + 1*FPEER + 1*GPEER
+slp =~ 3*BPEER + 5*CPEER + 7*DDPEER + 11*EPEER + 14*FPEER + 17*GPEER
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+mcs_sexstr_peer_fit_adj <- growth(mcs_sexstr_peer_adj, data = MCS_sdq_autism, group = "sex",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_sexstr_peer_fit_adj)
+fit_mcs_autism_peer_adj <- growth(mcs_sexstr_peer_adj, data = MCS_sdq_autism, missing = "fiml", estimator = "ml", fixed.x = F)
+mcs_agestr_peer_fit_adj_asd <- growth(mcs_sexstr_peer_adj, data = MCS_sdq_autism, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+
+
+anova_peer_age <- anova(fit_mcs_autism_peer_adj,mcs_agestr_peer_fit_adj_asd)
+anova_peer_sex <- anova(fit_mcs_autism_peer_adj,mcs_sexstr_peer_fit_adj)
+
+
+
+## Prosocial behaviours
+
+mcs_agestr_pro_adj <- "
+int =~ 1*BPROSOC + 1*CPROSOC + 1*DDPROSOC + 1*EPROSOC + 1*FPROSOC + 1*GPROSOC
+slp =~ 3*BPROSOC + 5*CPROSOC + 7*DDPROSOC + 11*EPROSOC + 14*FPROSOC + 17*GPROSOC
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+mcs_agestr_pro_fit_adj <- growth(mcs_agestr_pro_adj, data = MCS_sdq_all, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_pro_fit_adj)
+
+mcs_sexstr_pro_adj <- "
+int =~ 1*BPROSOC + 1*CPROSOC + 1*DDPROSOC + 1*EPROSOC + 1*FPROSOC + 1*GPROSOC
+slp =~ 3*BPROSOC + 5*CPROSOC + 7*DDPROSOC + 11*EPROSOC + 14*FPROSOC + 17*GPROSOC
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+mcs_sexstr_pro_fit_adj <- growth(mcs_sexstr_pro_adj, data = MCS_sdq_autism, group = "sex",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_sexstr_pro_fit_adj)
+fit_mcs_autism_pro_adj <- growth(mcs_sexstr_pro_adj, data = MCS_sdq_autism, missing = "fiml", estimator = "ml", fixed.x = F)
+mcs_agestr_pro_fit_adj_asd <- growth(mcs_sexstr_pro_adj, data = MCS_sdq_autism, group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+
+
+anova_pro_age <- anova(fit_mcs_autism_pro_adj,mcs_agestr_pro_fit_adj_asd)
+anova_pro_sex <- anova(fit_mcs_autism_pro_adj,mcs_sexstr_pro_fit_adj)
+
+
+
+------------------------------------------------------------------------------------------------------------
+
+## quadratic models
+
+mcs_agestr_ttl_adj_2 <- "
+int =~ 1*BEBDTOT + 1*CEBDTOT + 1*DDDEBDTOT + 1*EEBDTOT + 1*FEBDTOT + 1*GEBDTOT
+slp =~ 3*BEBDTOT + 5*CEBDTOT + 7*DDDEBDTOT + 11*EEBDTOT + 14*FEBDTOT + 17*GEBDTOT
+qua =~ 9*BEBDTOT + 25*CEBDTOT + 49*DDDEBDTOT + 121*EEBDTOT + 196*FEBDTOT + 289*GEBDTOT
+GEBDTOT ~~ 1*GEBDTOT
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+
+mcs_agestr_emo_adj_2 <- "
+int =~ 1*BEMOTION + 1*CEMOTION + 1*DDEMOTION + 1*EEMOTION + 1*FEMOTION + 1*GEMOTION
+slp =~ 3*BEMOTION + 5*CEMOTION + 7*DDEMOTION + 11*EEMOTION + 14*FEMOTION + 17*GEMOTION
+qua =~ 9*BEMOTION + 25*CEMOTION + 49*DDEMOTION + 121*EEMOTION + 196*FEMOTION + 289*GEMOTION
+
+"
+mcs_agestr_con_adj_2 <- "
+int =~ 1*BCONDUCT + 1*CCONDUCT + 1*DDCONDUCT + 1*ECONDUCT + 1*FCONDUCT + 1*GCONDUCT
+slp =~ 3*BCONDUCT + 5*CCONDUCT + 7*DDCONDUCT + 11*ECONDUCT + 14*FCONDUCT + 17*GCONDUCT
+qua =~ 9*BCONDUCT + 25*CCONDUCT + 49*DDCONDUCT + 121*ECONDUCT + 196*FCONDUCT + 289*GCONDUCT
+
+"
+
+mcs_agestr_hyp_adj_2 <- "
+int =~ 1*BHYPER + 1*CHYPER + 1*DDHYPER + 1*EHYPER + 1*FHYPER + 1*GHYPER
+slp =~ 3*BHYPER + 5*CHYPER + 7*DDHYPER + 11*EHYPER + 14*FHYPER + 17*GHYPER
+qua =~ 9*BHYPER + 25*CHYPER + 49*DDHYPER + 121*EHYPER + 196*FHYPER + 289*GHYPER
+
+"
+
+mcs_agestr_peer_adj_2 <- "
+int =~ 1*BPEER + 1*CPEER + 1*DDPEER + 1*EPEER + 1*FPEER + 1*GPEER
+slp =~ 3*BPEER + 5*CPEER + 7*DDPEER + 11*EPEER + 14*FPEER + 17*GPEER
+qua =~ 9*BPEER + 25*CPEER + 49*DDPEER + 121*EPEER + 196*FPEER + 289*GPEER
+
+"
+
+mcs_agestr_pro_adj_2 <- "
+int =~ 1*BPROSOC + 1*CPROSOC + 1*DDPROSOC + 1*EPROSOC + 1*FPROSOC + 1*GPROSOC
+slp =~ 3*BPROSOC + 5*CPROSOC + 7*DDPROSOC + 11*EPROSOC + 14*FPROSOC + 17*GPROSOC
+qua =~ 9*BPROSOC + 25*CPROSOC + 49*DDPROSOC + 121*EPROSOC + 196*FPROSOC + 289*GPROSOC
+
+"
+
+mcs_ttl_fit_adj_2 <- growth(mcs_agestr_ttl_adj_2, data = MCS_sdq_all,  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_ttl_fit_adj_2)
+mcs_agestr_ttl_fit_adj_2 <- growth(mcs_agestr_ttl_adj_2, data = MCS_sdq_all, group = "grp_num", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(mcs_agestr_ttl_fit_adj_2)
+mcs_sexstr_ttl_fit_adj_2 <- growth(mcs_agestr_ttl_adj_2, data = MCS_sdq_autism, group = "Sex", missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_sexstr_ttl_fit_adj_2)
+
+
+fit_mcs_agestr_emo_adj_2 <- growth(mcs_agestr_emo_adj_2, data = MCS_sdq_all, group =  "grp_num", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_agestr_emo_adj_2)
+
+
+fit_mcs_agestr_con_adj_2 <- growth(mcs_agestr_con_adj_2, data = MCS_sdq_all, group =  "grp_num", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_agestr_con_adj_2)
+
+
+fit_mcs_agestr_hyp_adj_2 <- growth(mcs_agestr_hyp_adj_2, data = MCS_sdq_all, group =  "grp_num", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_agestr_hyp_adj_2)
+
+
+fit_mcs_agestr_peer_adj_2 <- growth(mcs_agestr_peer_adj_2, data = MCS_sdq_all, group =  "grp_num", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_agestr_peer_adj_2)
+
+
+fit_mcs_agestr_pro_adj_2 <- growth(mcs_agestr_pro_adj_2, data = MCS_sdq_all, group =  "grp_num", missing = "fiml", estimator = "ml", fixed.x = F)
+summary(fit_mcs_agestr_pro_adj_2)
+
+
+fitMeasures(mcs_ttl_fit_adj,c("rmsea","chisq","pvalue","cfi","tli","aic","bic"))
+fitMeasures(mcs_ttl_fit_adj_2, c("rmsea","chisq","pvalue","cfi","tli","aic","bic"))
+
+
