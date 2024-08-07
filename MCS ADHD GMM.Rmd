@@ -1,0 +1,332 @@
+library(knitr)
+library(markdown)
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(data.table)
+library(lcmm)
+library(lavaan)
+library(stringr)
+
+
+## Load data
+
+MCS_adhd <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_adhd.csv") # 89 in total
+MCS_sdq_adhd <- MCS_adhd[,c(1:21,34:39,22:33,40:45)]
+MCS_sdq_adhd<- dplyr::mutate(MCS_sdq_adhd, numericID = row_number())
+MCS_autism_adhd_both <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_both.csv")
+MCS_sdq_both <- MCS_autism_adhd_both[,c(1:21,34:39,22:33,40:45)]
+MCS_sdq_both <- dplyr::mutate(MCS_sdq_both, numericID = row_number())
+
+
+# ADHD
+## Reshape data
+
+MCS_sdq_adhd <- MCS_sdq_adhd %>%
+  mutate(diag.age = case_when(
+    ADHD.Diagnosis.Age == "at W3" ~ 5,
+    ADHD.Diagnosis.Age == "at W4" ~ 7,
+    ADHD.Diagnosis.Age == "at W5" ~ 11,
+    ADHD.Diagnosis.Age == "at W6" ~ 14)
+    )
+MCS_adhd_wide_sdq_total <- MCS_sdq_adhd[,c("numericID","MCSID","Sex","diag.age","BEBDTOT","CEBDTOT", "DDDEBDTOT" ,"EEBDTOT","FEBDTOT","GEBDTOT")]
+MCS_adhd_long_sdq_total <- melt(setDT(MCS_adhd_wide_sdq_total), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_adhd_long_sdq_total <- MCS_adhd_long_sdq_total %>%
+  mutate(Sweep.age = case_when(
+    sweep == "BEBDTOT" ~ 3,
+    sweep == "CEBDTOT" ~ 5,
+    sweep == "DDDEBDTOT" ~ 7,
+    sweep == "EEBDTOT" ~ 11,
+    sweep == "FEBDTOT" ~ 14,
+    sweep == "GEBDTOT" ~ 17)
+    )
+
+
+MCS_adhd_wide_sdq_emo <- MCS_sdq_adhd[,c("numericID","MCSID","Sex","diag.age","BEMOTION","CEMOTION", "DDEMOTION","EEMOTION","FEMOTION","GEMOTION")]
+MCS_adhd_long_sdq_emo <- melt(setDT(MCS_adhd_wide_sdq_emo), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_adhd_long_sdq_emo <- MCS_adhd_long_sdq_emo %>%
+  mutate(Sweep.age = case_when(
+    sweep == "BEMOTION" ~ 3,
+    sweep == "CEMOTION" ~ 5,
+    sweep == "DDEMOTION" ~ 7,
+    sweep == "EEMOTION" ~ 11,
+    sweep == "FEMOTION" ~ 14,
+    sweep == "GEMOTION" ~ 17)
+    )
+
+
+MCS_adhd_wide_sdq_con <- MCS_sdq_adhd[,c("numericID","MCSID","Sex","diag.age","BCONDUCT","CCONDUCT","DDCONDUCT","ECONDUCT","FCONDUCT","GCONDUCT")]
+MCS_adhd_long_sdq_con <- melt(setDT(MCS_adhd_wide_sdq_con), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_adhd_long_sdq_con <- MCS_adhd_long_sdq_con %>%
+  mutate(Sweep.age = case_when(
+    sweep == "BCONDUCT" ~ 3,
+    sweep == "CCONDUCT" ~ 5,
+    sweep == "DDCONDUCT" ~ 7,
+    sweep == "ECONDUCT" ~11,
+    sweep == "FCONDUCT" ~ 14,
+    sweep == "GCONDUCT" ~ 17)
+    )
+
+
+MCS_adhd_wide_sdq_hyp <- MCS_sdq_adhd[,c("numericID","MCSID","Sex","diag.age","BHYPER","CHYPER","DDHYPER","EHYPER","FHYPER","GHYPER")]
+MCS_adhd_long_sdq_hyp <- melt(setDT(MCS_adhd_wide_sdq_hyp), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_adhd_long_sdq_hyp <- MCS_adhd_long_sdq_hyp %>%
+  mutate(Sweep.age = case_when(
+    sweep == "BHYPER" ~ 3,
+    sweep == "CHYPER" ~ 5,
+    sweep == "DDHYPER" ~ 7,
+    sweep == "EHYPER" ~ 11,
+    sweep == "FHYPER" ~ 14,
+    sweep == "GHYPER" ~ 17)
+    )
+
+
+MCS_adhd_wide_sdq_peer <- MCS_sdq_adhd[,c("numericID","MCSID","Sex","diag.age","BPEER","CPEER","DDPEER","EPEER","FPEER","GPEER")]
+MCS_adhd_long_sdq_peer <- melt(setDT(MCS_adhd_wide_sdq_peer), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_adhd_long_sdq_peer <- MCS_adhd_long_sdq_peer %>%
+  mutate(Sweep.age = case_when(
+    sweep == "BPEER" ~ 3,
+    sweep == "CPEER" ~ 5,
+    sweep == "DDPEER" ~ 7,
+    sweep == "EPEER" ~ 11,
+    sweep == "FPEER" ~ 14,
+    sweep == "GPEER" ~ 17)
+    )
+
+
+MCS_adhd_wide_sdq_pro <- MCS_sdq_adhd[,c("numericID","MCSID","Sex","diag.age","BPROSOC","CPROSOC","DDPROSOC","EPROSOC","FPROSOC","GPROSOC")]
+MCS_adhd_long_sdq_pro <- melt(setDT(MCS_adhd_wide_sdq_pro), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_adhd_long_sdq_pro <- MCS_adhd_long_sdq_pro %>%
+  mutate(Sweep.age = case_when(
+    sweep == "BPROSOC" ~ 3,
+    sweep == "CPROSOC" ~ 5,
+    sweep == "DDPROSOC" ~ 7,
+    sweep == "EPROSOC" ~ 11,
+    sweep == "FPROSOC" ~ 14,
+    sweep == "GPROSOC" ~ 17)
+    )
+age <- c("3","5","7","11","14","17")
+
+
+# GMM
+## SDQ total
+
+mcs_adhd_ttl_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_adhd_long_sdq_total)
+summary(mcs_adhd_ttl_gmm1)
+
+
+mcs_adhd_ttl_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_adhd_long_sdq_total, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = mcs_adhd_ttl_gmm1)
+summary(mcs_adhd_ttl_gmm2)
+
+
+mcs_adhd_ttl_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_adhd_long_sdq_total, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = mcs_adhd_ttl_gmm1)
+summary(mcs_adhd_ttl_gmm3)
+
+
+mcs_adhd_ttl_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = MCS_adhd_long_sdq_total, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = mcs_adhd_ttl_gmm1)
+summary(mcs_adhd_ttl_gmm4)
+fit_ind_ttl <- summarytable(mcs_adhd_ttl_gmm1, mcs_adhd_ttl_gmm2, mcs_adhd_ttl_gmm3, mcs_adhd_ttl_gmm4,which = c("AIC","BIC","SABIC","entropy","%class","npm","loglik"))
+
+ 
+#fit_ind <- summarytable(mcs_adhd_ttl_gmm1, mcs_adhd_ttl_gmm2, mcs_adhd_ttl_gmm3)
+
+
+
+# merge group memebrhsip to ID
+
+age <- c("3","5","7","11","14","17")
+
+MCS_adhd_long_sdq_total$numericID <- as.character(MCS_adhd_long_sdq_total$numericID)
+mcs_adhd_ttl_people2 <- as.data.frame(mcs_adhd_ttl_gmm2$pprob[,1:2])
+MCS_adhd_long_sdq_total$class <- factor(mcs_adhd_ttl_people2$class[sapply(MCS_adhd_long_sdq_total$numericID, function(x) which(mcs_adhd_ttl_people2$numericID==x))])
+
+
+
+
+
+## Emotional symptoms 
+
+
+mcs_adhd_emo_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_adhd_long_sdq_emo)
+#summary(mcs_adhd_emo_gmm1)
+
+
+mcs_adhd_emo_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_adhd_long_sdq_emo, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = mcs_adhd_emo_gmm1)
+#summary(mcs_adhd_emo_gmm2)
+
+
+mcs_adhd_emo_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_adhd_long_sdq_emo, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = mcs_adhd_emo_gmm1)
+summary(mcs_adhd_emo_gmm3)
+fit_ind <- summarytable(mcs_adhd_emo_gmm1, mcs_adhd_emo_gmm2, mcs_adhd_emo_gmm3)
+mcs_adhd_emo_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = MCS_adhd_long_sdq_emo, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = mcs_adhd_emo_gmm1)
+summary(mcs_adhd_emo_gmm4)
+fit_ind_emo <- summarytable(mcs_adhd_emo_gmm1, mcs_adhd_emo_gmm2, mcs_adhd_emo_gmm3, mcs_adhd_emo_gmm4,which = c("AIC","BIC","SABIC","entropy","%class","npm","loglik"))
+# loglik -1088.291  npm 19 BIC 2261.867  %c1 32.58427 %c2 42.69663 %c3  15.730337  %c4 8.988764, worse fit than gmm3, so it's omitted
+
+# merge group membership to ID
+MCS_adhd_long_sdq_emo$numericID <- as.character(MCS_adhd_long_sdq_emo$numericID)
+mcs_adhd_emo_people2 <- as.data.frame(mcs_adhd_emo_gmm2$pprob[,1:2])
+MCS_adhd_long_sdq_emo$class <- factor(mcs_adhd_emo_people2$class[sapply(MCS_adhd_long_sdq_emo$numericID, function(x) which(mcs_adhd_emo_people2$numericID==x))])
+
+
+mcs_emo_people3 <- as.data.frame(mcs_adhd_emo_gmm3$pprob[,1:2])
+MCS_adhd_long_sdq_emo$group_mcs_adhd_emo_gmm3 <- factor(mcs_emo_people3$class[sapply(MCS_adhd_long_sdq_emo$numericID, function(x) which(mcs_emo_people3$numericID==x))])
+
+
+## Conduct problems 
+
+mcs_adhd_con_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_adhd_long_sdq_con)
+summary(mcs_adhd_con_gmm1)
+
+
+mcs_adhd_con_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_adhd_long_sdq_con, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = mcs_adhd_con_gmm1)
+summary(mcs_adhd_con_gmm2)
+
+
+mcs_adhd_con_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_adhd_long_sdq_con, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = mcs_adhd_con_gmm1)
+summary(mcs_adhd_con_gmm3)
+fit_ind <- summarytable(mcs_adhd_con_gmm1, mcs_adhd_con_gmm2, mcs_adhd_con_gmm3)
+mcs_adhd_con_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = MCS_adhd_long_sdq_con, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = mcs_adhd_con_gmm1)
+summary(mcs_adhd_con_gmm4)
+fit_ind_con <- summarytable(mcs_adhd_con_gmm1, mcs_adhd_con_gmm2, mcs_adhd_con_gmm3, mcs_adhd_con_gmm4,which = c("AIC","BIC","SABIC","entropy","%class","npm","loglik"))
+
+
+
+
+# merge group memebrhsip to ID
+
+MCS_adhd_long_sdq_con$numericID <- as.character(MCS_adhd_long_sdq_con$numericID)
+mcs_adhd_con_people2 <- as.data.frame(mcs_adhd_con_gmm2$pprob[,1:2])
+MCS_adhd_long_sdq_con$class <- factor(mcs_adhd_con_people2$class[sapply(MCS_adhd_long_sdq_con$numericID, function(x) which(mcs_adhd_con_people2$numericID==x))])
+
+
+MCS_adhd_long_sdq_con$numericID <- as.character(MCS_adhd_long_sdq_con$numericID)
+mcs_adhd_con_people3 <- as.data.frame(mcs_adhd_con_gmm3$pprob[,1:2])
+MCS_adhd_long_sdq_con$class3 <- factor(mcs_adhd_con_people3$class[sapply(MCS_adhd_long_sdq_con$numericID, function(x) which(mcs_adhd_con_people3$numericID==x))])
+
+
+## Hyperactivity and inattention
+
+mcs_adhd_hyp_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_adhd_long_sdq_hyp)
+summary(mcs_adhd_hyp_gmm1)
+
+
+mcs_adhd_hyp_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_adhd_long_sdq_hyp, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = mcs_adhd_hyp_gmm1)
+summary(mcs_adhd_hyp_gmm2)
+
+
+mcs_adhd_hyp_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_adhd_long_sdq_hyp, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = mcs_adhd_hyp_gmm1)
+summary(mcs_adhd_hyp_gmm3)
+fit_ind <- summarytable(mcs_adhd_hyp_gmm1, mcs_adhd_hyp_gmm2, mcs_adhd_hyp_gmm3)
+ mcs_adhd_hyp_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = MCS_adhd_long_sdq_hyp, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = mcs_adhd_hyp_gmm1)
+summary(mcs_adhd_hyp_gmm4)
+fit_ind_hyp <- summarytable(mcs_adhd_hyp_gmm1, mcs_adhd_hyp_gmm2, mcs_adhd_hyp_gmm3, mcs_adhd_hyp_gmm4,which = c("AIC","BIC","SABIC","entropy","%class","npm","loglik"))
+
+
+
+
+# merge group memebrhsip to ID
+
+MCS_adhd_long_sdq_hyp$numericID <- as.character(MCS_adhd_long_sdq_hyp$numericID)
+mcs_adhd_hyp_people2 <- as.data.frame(mcs_adhd_hyp_gmm2$pprob[,1:2])
+MCS_adhd_long_sdq_hyp$class <- factor(mcs_adhd_hyp_people2$class[sapply(MCS_adhd_long_sdq_hyp$numericID, function(x) which(mcs_adhd_hyp_people2$numericID==x))])
+
+
+
+
+## Peer relationship problems
+
+
+mcs_adhd_peer_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_adhd_long_sdq_peer)
+summary(mcs_adhd_peer_gmm1)
+
+
+mcs_adhd_peer_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_adhd_long_sdq_peer, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = mcs_adhd_peer_gmm1)
+summary(mcs_adhd_peer_gmm2)
+
+
+mcs_adhd_peer_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_adhd_long_sdq_peer, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = mcs_adhd_peer_gmm1)
+summary(mcs_adhd_peer_gmm3)
+fit_ind <- summarytable(mcs_adhd_peer_gmm1, mcs_adhd_peer_gmm2, mcs_adhd_peer_gmm3)
+mcs_adhd_peer_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = MCS_adhd_long_sdq_peer, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = mcs_adhd_peer_gmm1)
+summary(mcs_adhd_peer_gmm4)
+fit_ind_peer <- summarytable(mcs_adhd_peer_gmm1, mcs_adhd_peer_gmm2, mcs_adhd_peer_gmm3, mcs_adhd_peer_gmm4, which = c("AIC","BIC","SABIC","entropy","%class"))
+
+# merge group memebrhsip to ID
+
+MCS_adhd_long_sdq_peer$numericID <- as.character(MCS_adhd_long_sdq_peer$numericID)
+mcs_adhd_peer_people2 <- as.data.frame(mcs_adhd_peer_gmm2$pprob[,1:2])
+MCS_adhd_long_sdq_peer$class <- factor(mcs_adhd_peer_people2$class[sapply(MCS_adhd_long_sdq_peer$numericID, function(x) which(mcs_adhd_peer_people2$numericID==x))])
+
+
+## Prosocial behaviour 
+
+
+mcs_adhd_pro_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_adhd_long_sdq_pro)
+summary(mcs_adhd_pro_gmm1)
+
+
+mcs_adhd_pro_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_adhd_long_sdq_pro, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = mcs_adhd_pro_gmm1)
+summary(mcs_adhd_pro_gmm2)
+
+
+mcs_adhd_pro_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_adhd_long_sdq_pro, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = mcs_adhd_pro_gmm1)
+summary(mcs_adhd_pro_gmm3)
+fit_ind <- summarytable(mcs_adhd_pro_gmm1, mcs_adhd_pro_gmm2, mcs_adhd_pro_gmm3)
+mcs_adhd_pro_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,ng = 4, data = MCS_adhd_long_sdq_pro, mixture = ~ Sweep,classmb =~ diag.age, nwg=T, B = mcs_adhd_pro_gmm1)
+summary(mcs_adhd_pro_gmm4)
+fit_ind_pro <- summarytable(mcs_adhd_pro_gmm1, mcs_adhd_pro_gmm2, mcs_adhd_pro_gmm3, mcs_adhd_pro_gmm4, which = c("AIC","BIC","SABIC","entropy","%class"))
+
+# merge group memebrhsip to ID
+
+MCS_adhd_long_sdq_pro$numericID <- as.character(MCS_adhd_long_sdq_pro$numericID)
+mcs_adhd_pro_people2 <- as.data.frame(mcs_adhd_pro_gmm2$pprob[,1:2])
+MCS_adhd_long_sdq_pro$class <- factor(mcs_adhd_pro_people2$class[sapply(MCS_adhd_long_sdq_pro$numericID, function(x) which(mcs_adhd_pro_people2$numericID==x))])
+
+
+
+# Group membership
+
+MCS_adhd_wide_sdq_emo$numericID <- as.character(MCS_adhd_wide_sdq_emo$numericID)
+mcs_adhd_ttl_people2$numericID <- as.character(mcs_adhd_ttl_people2$numericID)
+mcs_adhd_emo_people2$numericID <- as.character(mcs_adhd_emo_people2$numericID)
+mcs_adhd_con_people2$numericID <- as.character(mcs_adhd_con_people2$numericID)
+mcs_adhd_hyp_people2$numericID <- as.character(mcs_adhd_hyp_people2$numericID)
+mcs_adhd_peer_people2$numericID <- as.character(mcs_adhd_peer_people2$numericID)
+mcs_adhd_pro_people2$numericID <- as.character(mcs_adhd_pro_people2$numericID)
+mcs_adhd_group_df_list_2 <- list(MCS_adhd_wide_sdq_emo[,c("numericID","diag.age","Sex")], mcs_adhd_ttl_people2,mcs_adhd_emo_people2,mcs_adhd_con_people2,mcs_adhd_hyp_people2, mcs_adhd_peer_people2, mcs_adhd_pro_people2)
+
+mcs_adhd_group_membership_2 <- mcs_adhd_group_df_list_2 %>% reduce(full_join, by= 'numericID') 
+
+colnames(mcs_adhd_group_membership_2)[4:9] <- c("ttl","emo","con","hyp","peer","pro")
+mcs_adhd_group_membership_2$Sex <- ifelse(mcs_adhd_group_membership_2$Sex=="Male", 1, 2)
