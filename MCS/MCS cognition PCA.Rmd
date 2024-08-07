@@ -1,41 +1,33 @@
----
-title: "MCS ID Identifier"
-author: "Yira Zhang"
-date: "2023-02-02"
-output: html_document
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-## Raw data
-```{r}
+# This file will identify cognitive aptitude measures, examine for intellectual disability, and conduct Principal Component Analysis.
 library(readr)
 library(tidyverse)
 library(dplyr)
 library(corrplot)
-```
 
-```{r}
+## Raw data
+
 mcs2_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_cm_cognitive_assessment.tab")
 mcs3_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5795-tab/tab/mcs3_cm_cognitive_assessment.tab")
 mcs4_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-6411-tab/tab/mcs4_cm_cognitive_assessment.tab")
 mcs5_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-7464-tab/tab/mcs5_cm_cognitive_assessment.tab")
+
+
+=========================
+# Imputed data here, for new PCA with imputed data included
 mcs_imp <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/sftimp_data.csv")
 mcs_imp <- mcs_imp[-1]
 names(mcs_imp)[1] <- "CMID"
-```
+=========================
 
-```{r}
+
 mcs_cog_consistent_ID <- unique(mcs5_cog$MCSID[mcs5_cog$MCSID %in% mcs4_cog$MCSID[mcs4_cog$MCSID %in% mcs3_cog$MCSID[mcs3_cog$MCSID %in% mcs2_cog$MCSID]]])
 mcs2_cons_cog <- as.data.frame(mcs2_cog %>% filter(MCSID %in% mcs_cog_consistent_ID))
 mcs3_cons_cog <- as.data.frame(mcs3_cog %>% filter(MCSID %in% mcs_cog_consistent_ID)) 
 mcs4_cons_cog <- as.data.frame(mcs4_cog %>% filter(MCSID %in% mcs_cog_consistent_ID))
 mcs5_cons_cog <- as.data.frame(mcs5_cog %>% filter(MCSID %in% mcs_cog_consistent_ID))
-```
 
-```{r}
+
+
 mcs2_cog_sum <- dplyr::select(mcs2_cons_cog, MCSID,BCNUM00,BDSRCS00,BDSRCP00,BDSRCN00,BDBASR00,BDBASA00,BDBASP00,BDBAST00)
 mcs2_cog_sum$CMID <- paste(mcs2_cog_sum$MCSID, mcs2_cog_sum$BCNUM00, sep ="")
 mcs3_cog_sum <- dplyr::select(mcs3_cons_cog, MCSID,CCNUM00, CCNSCO00,CCNVABIL,CCNVTSCORE,CCCSCO00,CCPCABIL,CCPCTSCORE,CCCPAS00,CCCERR00,CCPSCO00,CCPSABIL,CCPSTSCORE)
@@ -48,9 +40,6 @@ mcs5_cog_sum$CMID <- paste(mcs5_cog_sum$MCSID, mcs5_cog_sum$ECNUM00, sep = "")
 df_list <- list(mcs2_cog_sum, mcs3_cog_sum, mcs4_cog_sum, mcs5_cog_sum)
 mcs_2_5_cog_sum <- df_list %>% reduce(full_join, by= c('CMID','MCSID'))
 
-```
-
-```{r}
 mcs_cog_pca <- dplyr::select(mcs_2_5_cog_sum, CMID,BDSRCS00, BDBASA00, CCNVABIL, CCPCABIL, CCPSABIL, DCPCAB00, DCWRAB00, DCMATHS7SA,ECDTOT00)
 
 mcs_cog_pca <- mcs_cog_pca %>% 
@@ -60,9 +49,7 @@ mcs_imp_cog <- rbind(mcs_cog_pca, imp_cog) %>% unique()
 mcs_cog_pca_complete <- mcs_cog_pca[,2:10]
 
 mcs_cog_pca_complete_imp <- mcs_imp_cog[,2:10]
-```
 
-```{r}
 cor(mcs_cog_pca_complete, use = "complete.obs")
 corrplot3 <- corrplot.mixed(cor(mcs_cog_pca_complete, use = "complete.obs"), upper = 'circle', 
                             lower = "number",
@@ -71,6 +58,7 @@ corrplot3 <- corrplot.mixed(cor(mcs_cog_pca_complete, use = "complete.obs"), upp
                             tl.cex = 0.8,
                             addCoefasPercent = TRUE,
                             number.cex=0.8)
+
 cor(mcs_cog_pca_complete_imp, use = "complete.obs")
 corrplot_imp <- corrplot.mixed(cor(mcs_cog_pca_complete_imp, use = "complete.obs"), upper = 'circle', 
                             lower = "number",
@@ -79,14 +67,12 @@ corrplot_imp <- corrplot.mixed(cor(mcs_cog_pca_complete_imp, use = "complete.obs
                             tl.cex = 0.8,
                             addCoefasPercent = TRUE,
                             number.cex=0.8)
-```
 
-```{r}
 
 pc <- prcomp(mcs_cog_pca_complete, center = TRUE, scale = TRUE)
 summary_pc <- summary(pc)
 mcs_iq_pca_summary <- as.data.frame(summary_pc$importance)
-# view(pc$rotation) # PC1 proportion of variance: 0.403960
+# view(pc$rotation) 
 cog_pc_score <- as.data.frame(summary_pc$x)
 mcs_cog_pca_score <- cbind(mcs_cog_pca$MCSID,mcs_cog_pca$BCNUM00, mcs_cog_pca$CMID, cog_pc_score)
 
@@ -100,10 +86,10 @@ names(mcs_cog_pca_score_imp)[1]<- "cmid"
 imp_IQ <- mcs_cog_pca_score_imp[,1:2]
 imp_asd_IQ <- imp_IQ[imp_IQ$cmid %in% mcs_imp$CMID, ] %>% unique()
 names(imp_asd_IQ)[2] <- "IQ"
-```
+
 
 ## Label ID
-```{r}
+
 # Label anyone with a PC1 score 2 or more standar deviation lower than the mean of PC1 score as ID.
 pc1_mean <- mean(mcs_cog_pca_score$PC1)
 mcs_cog_pca_score$ID <- ifelse(pc1_mean - mcs_cog_pca_score$PC1 >= 2* pca_summary[1,1],"1","0")
@@ -111,16 +97,13 @@ mcs_cog_pca_score$ID <- ifelse(pc1_mean - mcs_cog_pca_score$PC1 >= 2* pca_summar
 
 PC1_mean_imp <- mean(mcs_cog_pca_score_imp$PC1)
 mcs_cog_pca_score_imp$ID <- ifelse(PC1_mean_imp - mcs_cog_pca_score_imp$PC1 >= 2* mcs_iq_pca_summary_imp[1,1],"1","0")
-table(mcs_cog_pca_score_imp$ID) # prevalence rate dropped to 0.004654457 or 0/008094708 when using old summary
-```
+table(mcs_cog_pca_score_imp$ID) # prevalence rate dropped to 0.004654457 or 0.008094708 when using old summary
+
 
 # Generate dataframe
-```{r}
+
 mcs_ID_identifier <- as.data.frame(mcs_cog_pca_score[,c(1:4,13)])
-write.csv(mcs_ID_identifier, file = "/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ID_identifier.csv")
-
-
-```
+write.csv(mcs_ID_identifier, file = ...)
 
 
 # Cognitive ability 
