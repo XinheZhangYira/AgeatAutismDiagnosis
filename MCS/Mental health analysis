@@ -1,0 +1,264 @@
+Investigate the mental wellbeing of autistic children
+
+## Data
+
+MCS_autism <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_autism.csv") # 188 in total
+mcs2_parent_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_interview.tab")
+
+MCS_sdq_autism <- MCS_autism[,c(1:21,34:39,22:33,40:45)]
+MCS_sdq_autism <- subset(MCS_sdq_autism, select = -PID)
+MCS_sdq_autism$cmid <- paste(MCS_sdq_autism$MCSID, MCS_sdq_autism$CNUM, sep = "")
+
+
+mcs6_cm_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-8156-tab/tab/mcs6_cm_interview.tab")
+mcs6_cm_interview$cmid <- paste(mcs6_cm_interview$MCSID, mcs6_cm_interview$FCNUM00, sep = "")
+# smfq = short mood and feelings questionnaire
+mcs6_smfq <- mcs6_cm_interview %>% filter(cmid %in% MCS_sdq_autism$cmid) %>% dplyr::select(MCSID,cmid, FCMDSA00,FCMDSB00,FCMDSC00,FCMDSD00,FCMDSE00,FCMDSF00,FCMDSG00,FCMDSH00,FCMDSI00,FCMDSJ00,FCMDSK00,FCMDSL00,FCMDSM00)
+mcs6_smfq[mcs6_smfq < 0] <- NA
+mcs6_smfq[, 3:ncol(mcs6_smfq)] <- mcs6_smfq[, 3:ncol(mcs6_smfq)] - 1
+mcs_asd_smfq <- merge(mcs_gmm_2_group, mcs6_smfq, by = c("MCSID","cmid"), all = T)
+mcs_asd_smfq$smfq_ttl <- rowSums(mcs_asd_smfq[,13:25])
+
+
+smfh_ratio <- mcs_asd_mh[!is.na(mcs_asd_smfq$smfq_ttl), ] %>% 
+  group_by(ttl, Sex)%>%
+  dplyr::summarize(count = n())
+
+smfh_ratio
+
+
+summary_smfq <-mcs_asd_smfq %>%
+  dplyr::group_by(ttl,Sex) %>%
+  dplyr::summarize(
+    smfq_Median = median(smfq_ttl, na.rm = TRUE),
+    smfq_Q1 = quantile(smfq_ttl, probs = 0.25, na.rm = TRUE),
+    smfq_Q3 = quantile(smfq_ttl, probs = 0.75, na.rm = TRUE)
+  )  
+
+
+summary_smfq_sex <-mcs_asd_smfq %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::summarize(
+    smfq_Median = median(smfq_ttl, na.rm = TRUE),
+    smfq_Q1 = quantile(smfq_ttl, probs = 0.25, na.rm = TRUE),
+    smfq_Q3 = quantile(smfq_ttl, probs = 0.75, na.rm = TRUE)
+  )  
+
+print(summary_smfq_sex)
+
+summary_smfq_grp <-mcs_asd_smfq %>% group_by(ttl) %>%
+  dplyr::summarize(
+    smfq_Median = median(smfq_ttl, na.rm = TRUE),
+    smfq_Q1 = quantile(smfq_ttl, probs = 0.25, na.rm = TRUE),
+    smfq_Q3 = quantile(smfq_ttl, probs = 0.75, na.rm = TRUE)
+  )  
+print(summary_smfq_grp)
+
+summary_smfq_ova <-mcs_asd_smfq %>%
+  dplyr::summarize(
+    smfq_Median = median(smfq_ttl, na.rm = TRUE),
+    smfq_Q1 = quantile(smfq_ttl, probs = 0.25, na.rm = TRUE),
+    smfq_Q3 = quantile(smfq_ttl, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_smfq_ova)
+
+mcs_smfq_model_poisson <- glm(smfq_ttl ~ ttl + Sex, family = poisson, data = mcs_asd_smfq)
+mcs_smfq_model_poissonsum <- broom::tidy(mcs_smfq_model_poisson)
+mcs_smfq_model_poisson_int <- glm(smfq_ttl ~ ttl + Sex + ttl:Sex, family = poisson, data = mcs_asd_smfq)
+mcs_smfq_model_poisson_intsum <- broom::tidy(mcs_smfq_model_poisson_int)
+mcs_smfq_mode_sum <- rbind(mcs_smfq_model_poissonsum,mcs_smfq_model_poisson_intsum)
+mcs_smfq_mode_sum
+```
+```{r}
+# Perform Mann-Whitney U test
+smfq.diff <- wilcox.test(smfq_ttl ~ ttl, data = mcs_asd_smfq)
+smfq.diff
+
+smfq.diff.sex <- wilcox.test(smfq_ttl ~ Sex, data = mcs_asd_smfq)
+smfq.diff.sex
+
+smfq.diff.sex.1 <- wilcox.test(smfq_ttl ~ Sex, data = mcs_asd_smfq[mcs_asd_smfq$ttl == 1,])
+smfq.diff.sex.1
+
+smfq.diff.sex.2 <- wilcox.test(smfq_ttl ~ Sex, data = mcs_asd_smfq[mcs_asd_smfq$ttl == 2,])
+smfq.diff.sex.2
+
+smfq.diff.male <- wilcox.test(smfq_ttl ~ ttl, data = mcs_asd_smfq[mcs_asd_smfq$Sex == 1,])
+smfq.diff.male
+smfq.diff.female <- wilcox.test(smfq_ttl ~ ttl, data = mcs_asd_smfq[mcs_asd_smfq$Sex == 2,])
+smfq.diff.female
+
+# identify measures of mental health diagnosis (if any)
+mcs7_cm_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-8682-tab/tab/mcs7_cm_interview.tab")
+mcs7_cm_interview$cmid <- paste(mcs7_cm_interview$MCSID, mcs7_cm_interview$GCNUM00, sep = "")
+mcs7_mh_condition<- mcs7_cm_interview %>% filter(cmid %in% MCS_sdq_autism$cmid) %>% dplyr::select(MCSID, cmid,GCDEAN00,GCCLSM0G,GCCLSM0O,GCPHDE00,GCPHHO00,GCPHRF00,GCPHEE00,GCPHWO00,GCPHNE00,GCSHCU00,GCSHBU00,GCSHBR00,GCSHOD00,GCSHPU00,GCSHRM00,GCSHRZ0A,
+GCSHRZ0B,GCSHRZ0C,GCSHRZ0D,GCSHRZ0E,GCSHRZ0F,GCSHRZ0N,GCSHRZ0O,GCSUIC00)
+
+mcs7_mh_condition$GCDEAN00[mcs7_mh_condition$GCDEAN00 %in% c(3,4,5)] <- NA
+mcs7_mh_condition$GCDEAN00 <- ifelse(mcs7_mh_condition$GCDEAN00 == 2,0,1)
+mcs7_mh_condition <- mcs7_mh_condition %>% dplyr::mutate_at(vars(c("GCCLSM0G","GCCLSM0O")), ~ ifelse(. == -1, NA, .)) %>% dplyr::mutate_at(vars(c("GCPHDE00","GCPHHO00","GCPHRF00","GCPHEE00","GCPHWO00","GCPHNE00")), ~ ifelse(. %in% c(6,7,8), NA, .)) %>% dplyr::mutate_at(vars(c("GCSHCU00","GCSHBU00","GCSHBR00","GCSHOD00","GCSHPU00","GCSHRM00")), ~ifelse(. %in% c(3,4,5),NA,.)) %>% mutate_at(vars(c("GCSHRZ0A","GCSHRZ0B","GCSHRZ0C","GCSHRZ0D","GCSHRZ0E","GCSHRZ0F","GCSHRZ0N","GCSHRZ0O")), ~ ifelse(. == -1, NA, .)) %>% dplyr::mutate_at(vars("GCSUIC00"), ~ ifelse(. %in% c(3,4,5),NA,.))
+
+sex_ratio_diag_age <- mcs_gmm_2_group %>%
+  group_by(diag.age, Sex) %>%
+  dplyr::summarize(count = n())
+sex_ratio_diag_age
+
+mcs_asd_mh <- merge(mcs_gmm_2_group, mcs7_mh_condition, by = c("MCSID","cmid"), all = T)
+
+mcs_asd_mh$mh <- ifelse(mcs_asd_mh$GCDEAN00 == 1|mcs_asd_mh$GCCLSM0G == 1, 1, 0)
+kessler <- c("GCPHDE00","GCPHHO00","GCPHRF00","GCPHEE00","GCPHWO00","GCPHNE00")
+
+# recode Kessler 6 to have higher values indicating more severe problems
+mcs_asd_mh <- mcs_asd_mh %>% mutate_at(all_of(kessler), ~ 6 - .)
+
+# Recode for suicidal ideation: 1 = Yes, 0 = No
+mcs_asd_mh$GCSUIC00 <- ifelse(mcs_asd_mh$GCSUIC00 == 2,0,mcs_asd_mh$GCSUIC00)
+
+# Recode for some self-harm behaviours: 1 = Yes, 0 = No
+mcs_asd_mh <- mcs_asd_mh %>% mutate_at(vars("GCSHCU00","GCSHBU00","GCSHBR00","GCSHOD00","GCSHPU00","GCSHRM00"), ~ifelse(. == 2, 0,.))
+# have a total score for Kessler
+mcs_asd_mh <- mcs_asd_mh %>% mutate(KS = GCPHDE00+GCPHHO00+GCPHRF00+GCPHEE00+GCPHWO00+GCPHNE00)
+
+# have a total score for self-harm 
+col_range <- which(names(mcs_asd_mh) %in% c("GCSHCU00","GCSHBU00","GCSHBR00","GCSHOD00","GCSHPU00","GCSHRM00","GCSHRZ0A","GCSHRZ0B","GCSHRZ0C","GCSHRZ0D","GCSHRZ0E","GCSHRZ0F","GCSHRZ0N","GCSHRZ0O"))
+
+# Filter rows based on the presence of at least one non-NA value in the column range
+mcs_asd_mh_sh <- mcs_asd_mh[rowSums(!is.na(mcs_asd_mh[, col_range])) > 0, ]
+
+
+mcs_asd_mh_sh <- mcs_asd_mh_sh %>% mutate(self_harm = GCSHCU00+GCSHBU00+GCSHBR00+GCSHOD00+GCSHPU00+GCSHRM00+GCSHRZ0A+GCSHRZ0B+GCSHRZ0C+GCSHRZ0D+GCSHRZ0E+GCSHRZ0F+GCSHRZ0N+GCSHRZ0O)
+
+mh_ratio_ttl_grp <- mcs_asd_mh %>% group_by(ttl, mh, Sex)%>%
+  dplyr::summarize(count = n())
+mh_ratio_ttl_grp
+
+sui_ratio_ttl_grp <- mcs_asd_mh %>% group_by(ttl,GCSUIC00 , Sex)%>%
+  dplyr::summarize(count = n())
+sui_ratio_ttl_grp
+
+
+# Kessler 6
+
+```{r}
+mh_ratio_KS <- mcs_asd_mh[!is.na(mcs_asd_mh$KS), ] %>% 
+  group_by(ttl, Sex)%>%
+  dplyr::summarize(count = n())
+mh_ratio_KS
+
+
+mcs_asd_mh$KS <- as.integer(mcs_asd_mh$KS)
+# Calculate summary statistics by group and for total sample
+summary_KS <-mcs_asd_mh %>%
+  dplyr::group_by(ttl,Sex) %>%
+  dplyr::summarize(
+    KS_Median = median(KS, na.rm = TRUE),
+    KS_Q1 = quantile(KS, probs = 0.25, na.rm = TRUE),
+    KS_Q3 = quantile(KS, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_KS)
+
+summary_KS_sex <-mcs_asd_mh %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::summarize(
+    KS_Median = median(KS, na.rm = TRUE),
+    KS_Q1 = quantile(KS, probs = 0.25, na.rm = TRUE),
+    KS_Q3 = quantile(KS, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_KS_sex)
+
+# Perform Mann-Whitney U test
+ks.diff <- wilcox.test(KS ~ ttl, data = mcs_asd_mh)
+ks.diff
+
+ks.diff.sex <- wilcox.test(KS ~ Sex, data = mcs_asd_mh)
+ks.diff.sex
+
+ks.diff.sex.1 <- wilcox.test(KS ~ Sex, data = mcs_asd_mh[mcs_asd_mh$ttl == 1,])
+ks.diff.sex.1
+
+ks.diff.sex.2 <- wilcox.test(KS ~ Sex, data = mcs_asd_mh[mcs_asd_mh$ttl == 2,])
+ks.diff.sex.2
+
+ks.diff.male <- wilcox.test(KS ~ ttl, data = mcs_asd_mh[mcs_asd_mh$Sex == 1,])
+ks.diff.male
+ks.diff.female <- wilcox.test(KS ~ ttl, data = mcs_asd_mh[mcs_asd_mh$Sex == 2,])
+ks.diff.female
+
+
+# Self-Harm
+
+mh_ratio_sh <- mcs_asd_mh_sh %>% 
+  group_by(ttl, Sex)%>%
+  dplyr::summarize(count = n())
+mh_ratio_sh
+mcs_asd_mh_sh$self_harm <- as.integer(mcs_asd_mh_sh$self_harm)
+# Calculate summary statistics by group and for total sample
+summary_self_harm <-mcs_asd_mh_sh %>%
+  dplyr::group_by(ttl,Sex) %>%
+  dplyr::summarize(
+    self_harm_Median = median(self_harm, na.rm = TRUE),
+    self_harm_Q1 = quantile(self_harm, probs = 0.25, na.rm = TRUE),
+    self_harm_Q3 = quantile(self_harm, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_self_harm)
+
+summary_self_harm_grp <-mcs_asd_mh_sh %>%
+  dplyr::group_by(ttl) %>%
+  dplyr::summarize(
+    self_harm_Median = median(self_harm, na.rm = TRUE),
+    self_harm_Q1 = quantile(self_harm, probs = 0.25, na.rm = TRUE),
+    self_harm_Q3 = quantile(self_harm, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_self_harm_grp)
+
+summary_self_harm_sex <-mcs_asd_mh_sh %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::summarize(
+    self_harm_Median = median(self_harm, na.rm = TRUE),
+    self_harm_Q1 = quantile(self_harm, probs = 0.25, na.rm = TRUE),
+    self_harm_Q3 = quantile(self_harm, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_self_harm_sex)
+
+
+summary_self_harm_all <-mcs_asd_mh_sh %>%
+
+  dplyr::summarize(
+    self_harm_Median = median(self_harm, na.rm = TRUE),
+    self_harm_Q1 = quantile(self_harm, probs = 0.25, na.rm = TRUE),
+    self_harm_Q3 = quantile(self_harm, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_self_harm_all)
+
+# Perform Mann-Whitney U test
+self_harm.diff <- wilcox.test(self_harm ~ ttl, data = mcs_asd_mh_sh)
+self_harm.diff
+
+self_harm.diff.sex <- wilcox.test(self_harm ~ Sex, data = mcs_asd_mh_sh)
+self_harm.diff.sex
+
+self_harm.diff.sex.1 <- wilcox.test(self_harm ~ Sex, data = mcs_asd_mh_sh[mcs_asd_mh_sh$ttl == 1,])
+self_harm.diff.sex.1
+
+self_harm.diff.sex.2 <- wilcox.test(self_harm ~ Sex, data = mcs_asd_mh_sh[mcs_asd_mh_sh$ttl == 2,])
+self_harm.diff.sex.2
+
+self_harm.diff.male <- wilcox.test(self_harm ~ ttl, data = mcs_asd_mh_sh[mcs_asd_mh_sh$Sex == 1,])
+self_harm.diff.male
+self_harm.diff.female <- wilcox.test(self_harm ~ ttl, data = mcs_asd_mh_sh[mcs_asd_mh_sh$Sex == 2,])
+self_harm.diff.female
+
+
+mcs_self_harm_mod <- glm(self_harm ~ ttl + Sex, data = mcs_asd_mh_sh, family = poisson)
+mcs_self_harm_modsum <- broom::tidy(mcs_self_harm_mod)
+mcs_self_harm_mod_int <- glm(self_harm ~ ttl + Sex + ttl:Sex, data = mcs_asd_mh_sh, family = poisson)
+mcs_self_harm_mod_intsum <- broom::tidy(mcs_self_harm_mod_int)
+mcs_self_harm_sum <- rbind(mcs_self_harm_modsum, mcs_self_harm_mod_intsum)
+mcs_self_harm_sum
