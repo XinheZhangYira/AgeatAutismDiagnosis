@@ -1,24 +1,16 @@
----
-title: "River plot analysis"
-author: "Yira Zhang"
-date: "2024-06-03"
-output: html_document
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-## Load data 
-```{r}
-
-# MCS-B
-mcsb_river <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcsb_river.csv")
-```
-
-```{r}
 library(ggalluvial)
 library(ggplot2)
+library(plotly)
+
+## Load data 
+
+
+# MCS-expanded
+
+# load data files containing group memberships of 2-, 3-, 4- (if optimal) models
+mcsb_river <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcsb_river.csv")
+
+
 ggplot(data = mcsb_river,
        aes(axis1 = con2, axis2 = con3)) +
   geom_alluvium(aes(fill = con2)) +
@@ -26,11 +18,9 @@ ggplot(data = mcsb_river,
   geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
   theme_minimal() +
   ggtitle("River Plot of Group Transitions")
-```
 
 
-```{r}
-library(plotly)
+
 mcsb_river$con2_grp <- paste("con2",mcsb_river$con2)
 mcsb_river$con3_grp <- paste("con3",mcsb_river$con3)
 # Aggregate the data to get the counts of transitions
@@ -80,13 +70,6 @@ fig_b_con <- fig_b_con %>% layout(
 fig_b_con
 
 
-
-```
-
-
-
-```{r}
-library(plotly)
 mcsb_river$pro2_grp <- paste("pro2",mcsb_river$pro2)
 mcsb_river$pro3_grp <- paste("pro3",mcsb_river$pro3)
 # Aggregate the data to get the counts of transitions
@@ -137,18 +120,17 @@ fig_b_pro
 
 
 
-```
 
 
-# Imputed 
-```{r}
+
+## MCS Imputed 
 
 mcs_imp_river <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_imp_river.csv")
-```
+
 
 
 # Emotional
-```{r}
+
 
 mcs_imp_river$emo_grp <- paste("emo",mcs_imp_river$emo)
 mcs_imp_river$emo3_grp <- paste("emo3",mcs_imp_river$emo3)
@@ -211,10 +193,10 @@ fig_i_emo <- fig_i_emo %>% layout(
 # Plot the figure
 fig_i_emo
 
-```
+
 
 # Conduct
-```{r}
+
 
 mcs_imp_river$con2_grp <- paste("con",mcs_imp_river$con)
 mcs_imp_river$con3_grp <- paste("con4",mcs_imp_river$con3)
@@ -265,9 +247,9 @@ fig_i_con
 
 
 
-```
+
 # Peer
-```{r}
+
 
 mcs_imp_river$peer2_grp <- paste("peer2",mcs_imp_river$peer)
 mcs_imp_river$peer3_grp <- paste("peer3",mcs_imp_river$peer3)
@@ -318,9 +300,9 @@ fig_i_peer
 
 
 
-```
+
 # Prosocial
-```{r}
+
 
 mcs_imp_river$pro2_grp <- paste("pro2",mcs_imp_river$pro)
 mcs_imp_river$pro3_grp <- paste("pro3",mcs_imp_river$pro3)
@@ -380,5 +362,5 @@ fig_i_pro
 
 
 
-```
+
 
