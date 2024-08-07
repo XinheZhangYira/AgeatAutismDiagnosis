@@ -1,0 +1,303 @@
+
+library(knitr)
+library(markdown)
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(data.table)
+library(lcmm)
+library(lavaan)
+library(stringr)
+
+
+## Data
+# Load prepared data
+
+# Cr. Yuanjun Gu
+MCS_autism <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_autism.csv") # 188 in total
+MCS_sdq_autism <- MCS_autism[,c(1:21,34:39,22:33,40:45)] 
+MCS_sdq_autism <- dplyr::mutate(MCS_sdq_autism, numericID = row_number())
+MCS_adhd <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_adhd.csv") # 89 in total
+MCS_sdq_adhd <- MCS_adhd[,c(1:21,34:39,22:33,40:45)]
+MCS_autism_adhd_both <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_both.csv")
+MCS_sdq_both <- MCS_autism_adhd_both[,c(1:21,34:39,22:33,40:45)]
+MCS_no_diag <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_control.csv") # 6047 in total
+MCS_sdq_no_diag <- MCS_no_diag[,c(1:21,34:39,22:33,40:45)]
+
+
+MCS_sdq_autism <- MCS_sdq_autism %>%
+  mutate(diag.age = case_when(
+    ASD.Diagnosis.Age == "at W3" ~ 5,
+    ASD.Diagnosis.Age == "at W4" ~ 7,
+    ASD.Diagnosis.Age == "at W5" ~ 11,
+    ASD.Diagnosis.Age == "at W6" ~ 14)
+    )
+MCS_autism_wide_sdq_total <- MCS_sdq_autism[,c("numericID","MCSID","Sex","diag.age","BEBDTOT","CEBDTOT", "DDDEBDTOT" ,"EEBDTOT","FEBDTOT","GEBDTOT")]
+MCS_autism_long_sdq_total <- melt(setDT(MCS_autism_wide_sdq_total), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_total <- MCS_autism_long_sdq_total %>%
+  mutate(Sweep = case_when(
+    sweep == "BEBDTOT" ~ 2,
+    sweep == "CEBDTOT" ~ 3,
+    sweep == "DDDEBDTOT" ~ 4,
+    sweep == "EEBDTOT" ~ 5,
+    sweep == "FEBDTOT" ~ 6,
+    sweep == "GEBDTOT" ~ 7)
+    )
+
+
+MCS_autism_wide_sdq_emo <- MCS_sdq_autism[,c("numericID","MCSID","Sex","diag.age","BEMOTION","CEMOTION", "DDEMOTION","EEMOTION","FEMOTION","GEMOTION")]
+MCS_autism_long_sdq_emo <- melt(setDT(MCS_autism_wide_sdq_emo), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_emo <- MCS_autism_long_sdq_emo %>%
+  mutate(Sweep = case_when(
+    sweep == "BEMOTION" ~ 2,
+    sweep == "CEMOTION" ~ 3,
+    sweep == "DDEMOTION" ~ 4,
+    sweep == "EEMOTION" ~ 5,
+    sweep == "FEMOTION" ~ 6,
+    sweep == "GEMOTION" ~ 7)
+    )
+
+
+MCS_autism_wide_sdq_con <- MCS_sdq_autism[,c("numericID","MCSID","Sex","diag.age","BCONDUCT","CCONDUCT","DDCONDUCT","ECONDUCT","FCONDUCT","GCONDUCT")]
+MCS_autism_long_sdq_con <- melt(setDT(MCS_autism_wide_sdq_con), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_con <- MCS_autism_long_sdq_con %>%
+  mutate(Sweep = case_when(
+    sweep == "BCONDUCT" ~ 2,
+    sweep == "CCONDUCT" ~ 3,
+    sweep == "DDCONDUCT" ~ 4,
+    sweep == "ECONDUCT" ~ 5,
+    sweep == "FCONDUCT" ~ 6,
+    sweep == "GCONDUCT" ~ 7)
+    )
+
+
+MCS_autism_wide_sdq_hyp <- MCS_sdq_autism[,c("numericID","MCSID","Sex","diag.age","BHYPER","CHYPER","DDHYPER","EHYPER","FHYPER","GHYPER")]
+MCS_autism_long_sdq_hyp <- melt(setDT(MCS_autism_wide_sdq_hyp), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_hyp <- MCS_autism_long_sdq_hyp %>%
+  mutate(Sweep = case_when(
+    sweep == "BHYPER" ~ 2,
+    sweep == "CHYPER" ~ 3,
+    sweep == "DDHYPER" ~ 4,
+    sweep == "EHYPER" ~ 5,
+    sweep == "FHYPER" ~ 6,
+    sweep == "GHYPER" ~ 7)
+    )
+
+
+MCS_autism_wide_sdq_peer <- MCS_sdq_autism[,c("numericID","MCSID","Sex","diag.age","BPEER","CPEER","DDPEER","EPEER","FPEER","GPEER")]
+MCS_autism_long_sdq_peer <- melt(setDT(MCS_autism_wide_sdq_peer), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_peer <- MCS_autism_long_sdq_peer %>%
+  mutate(Sweep = case_when(
+    sweep == "BPEER" ~ 2,
+    sweep == "CPEER" ~ 3,
+    sweep == "DDPEER" ~ 4,
+    sweep == "EPEER" ~ 5,
+    sweep == "FPEER" ~ 6,
+    sweep == "GPEER" ~ 7)
+    )
+
+
+MCS_autism_wide_sdq_pro <- MCS_sdq_autism[,c("numericID","MCSID","Sex","diag.age","BPROSOC","CPROSOC","DDPROSOC","EPROSOC","FPROSOC","GPROSOC")]
+MCS_autism_long_sdq_pro <- melt(setDT(MCS_autism_wide_sdq_pro), id.vars = c("numericID","MCSID","Sex","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_pro <- MCS_autism_long_sdq_pro %>%
+  mutate(Sweep = case_when(
+    sweep == "BPROSOC" ~ 2,
+    sweep == "CPROSOC" ~ 3,
+    sweep == "DDPROSOC" ~ 4,
+    sweep == "EPROSOC" ~ 5,
+    sweep == "FPROSOC" ~ 6,
+    sweep == "GPROSOC" ~ 7)
+    )
+age <- c("3","5","7","11","14","17")
+
+
+## Growth Mixture Modelling
+
+# SDQ total
+
+mcs_ttl_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_total)
+summary(mcs_ttl_gmm1)
+
+
+mcs_ttl_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_total, mixture = ~ Sweep, classmb =~ diag.age,
+nwg=T, B = mcs_ttl_gmm1)
+summary(mcs_ttl_gmm2)
+
+
+
+mcs_ttl_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_total, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = mcs_ttl_gmm1)
+summary(mcs_ttl_gmm3)
+
+mcs_ttl_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_total, mixture = ~ Sweep,classmb =~ diag.age,
+nwg=T, B = mcs_ttl_gmm1)
+summary(mcs_ttl_gmm4)
+
+# make a table with results for the models:
+fit_ind <- summarytable(mcs_ttl_gmm1, mcs_ttl_gmm2, mcs_ttl_gmm3, mcs_ttl_gmm4)
+
+
+
+# Emotional Symptoms
+
+
+mcs_emo_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_emo)
+summary(mcs_emo_gmm1)
+
+mcs_emo_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_emo, mixture = ~ Sweep,
+nwg=T, B = mcs_emo_gmm1)
+summary(mcs_emo_gmm2)
+
+
+mcs_emo_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_emo, mixture = ~ Sweep,
+nwg=T, B = mcs_emo_gmm1)
+
+mcs_emo_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_emo, mixture = ~ Sweep,
+nwg=T, B = mcs_emo_gmm1)
+
+
+# make a table with results for the models:
+fit_ind <- summarytable(mcs_emo_gmm1, mcs_emo_gmm2, mcs_emo_gmm3, mcs_emo_gmm4)
+
+
+
+
+# Conduct problems
+
+
+mcs_con_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_con)
+summary(mcs_con_gmm1)
+
+mcs_con_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_con, mixture = ~ Sweep,
+nwg=T, B = mcs_con_gmm1)
+summary(mcs_con_gmm2)
+
+mcs_con_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_con, mixture = ~ Sweep,
+nwg=T, B = mcs_con_gmm1)
+
+mcs_con_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_con, mixture = ~ Sweep,
+nwg=T, B = mcs_con_gmm1)
+
+
+# make a table with results for the models:
+fit_ind <- summarytable(mcs_con_gmm1, mcs_con_gmm2, mcs_con_gmm3, mcs_con_gmm4)
+
+
+
+
+# Hyperactivity
+
+
+mcs_hyp_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_hyp)
+summary(mcs_hyp_gmm1)
+
+mcs_hyp_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_hyp, mixture = ~ Sweep,
+nwg=T, B = mcs_hyp_gmm1)
+summary(mcs_hyp_gmm2)
+
+
+mcs_hyp_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_hyp, mixture = ~ Sweep,
+nwg=T, B = mcs_hyp_gmm1)
+
+mcs_hyp_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_hyp, mixture = ~ Sweep,
+nwg=T, B = mcs_hyp_gmm1)
+
+
+# make a table with results for the models:
+fit_ind <- summarytable(mcs_hyp_gmm1, mcs_hyp_gmm2, mcs_hyp_gmm3, mcs_hyp_gmm4)
+
+
+# Peer 
+
+
+
+mcs_peer_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_peer)
+summary(mcs_peer_gmm1)
+
+mcs_peer_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_peer, mixture = ~ Sweep,
+nwg=T, B = mcs_peer_gmm1)
+summary(mcs_peer_gmm2)
+
+mcs_peer_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_peer, mixture = ~ Sweep,
+nwg=T, B = mcs_peer_gmm1)
+
+mcs_peer_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_peer, mixture = ~ Sweep,
+nwg=T, B = mcs_peer_gmm1)
+
+
+# make a table with results for the models:
+fit_ind <- summarytable(mcs_peer_gmm1, mcs_peer_gmm2, mcs_peer_gmm3, mcs_peer_gmm4)
+
+
+
+
+
+# Prosocial
+
+
+
+mcs_pro_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_pro)
+summary(mcs_pro_gmm1)
+
+mcs_pro_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_pro, mixture = ~ Sweep,
+nwg=T, B = mcs_pro_gmm1)
+summary(mcs_pro_gmm2)
+
+mcs_pro_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_pro, mixture = ~ Sweep,
+nwg=T, B = mcs_pro_gmm1)
+summary(mcs_pro_gmm3)
+
+mcs_pro_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_pro, mixture = ~ Sweep,
+nwg=T, B = mcs_pro_gmm1)
+summary(mcs_pro_gmm4)
+
+mcs_pro_gmm5 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 5, , data = MCS_autism_long_sdq_pro, mixture = ~ Sweep, 
+nwg=T, B = mcs_pro_gmm1)
+summary(mcs_pro_gmm5)
+# make a table with results for the models:
+fit_ind <- summarytable(mcs_pro_gmm1, mcs_pro_gmm2, mcs_pro_gmm3, mcs_pro_gmm4, mcs_pro_gmm5)
+
+
+
+
+# Group membership (of the optimal models)
+
+
+MCS_autism_wide_sdq_emo$numericID <- as.character(MCS_autism_wide_sdq_emo$numericID)
+mcs_ttl_people2$numericID <- as.character(mcs_ttl_people2$numericID)
+mcs_emo_people2$numericID <- as.character(mcs_emo_people2$numericID)
+mcs_con_people2$numericID <- as.character(mcs_con_people2$numericID)
+mcs_hyp_people2$numericID <- as.character(mcs_hyp_people2$numericID)
+mcs_peer_people2$numericID <- as.character(mcs_peer_people2$numericID)
+mcs_pro_people2$numericID <- as.character(mcs_pro_people2$numericID)
+group_df_list_2 <- list(MCS_autism_wide_sdq_emo[,c("numericID","diag.age","Sex")], mcs_ttl_people2,mcs_emo_people2, mcs_con_people2, mcs_hyp_people2, mcs_peer_people2, mcs_pro_people2)
+
+group_membership_2 <- group_df_list_2 %>% reduce(full_join, by= 'numericID') 
+
+colnames(group_membership_2)[4:9] <- c("ttl","emo","con","hyp","peer","pro")
+group_membership_2$Sex <- ifelse(group_membership_2$Sex=="Male", 1, 2)
