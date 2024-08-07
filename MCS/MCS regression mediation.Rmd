@@ -1,0 +1,157 @@
+
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(data.table)
+library(tidyverse)
+library(lavaan)
+library(tidySEM)
+library(car)
+library(misty)
+library(plyr)
+
+
+
+## Data
+
+MCS_autism <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_autism.csv") # 188 in total
+mcs2_parent_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_interview.tab")
+mcs_ID_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ID_identifier.csv")
+mcs_ethnicity_mbirth_age <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_race_mbirthage.csv")
+mcs2_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ses_identifier.csv")
+mcs2_dep_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_deprivation_identifier.csv") 
+mcs2_family_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_family_derived.tab")
+mcs2_other_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_other_ses_identifier.csv")
+mcs_gmm_2_group <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_autism_gmm_group_membership.csv") 
+
+MCS_sdq_autism <- MCS_autism[,c(1:21,34:39,22:33,40:45)]
+MCS_sdq_autism <- subset(MCS_sdq_autism, select = -PID)
+MCS_sdq_autism$cmid <- paste(MCS_sdq_autism$MCSID, MCS_sdq_autism$CNUM, sep = "")
+
+mcs_gmm_2_group <- cbind(MCS_sdq_autism$cmid,mcs_gmm_2_group)
+names(mcs_gmm_2_group)[1] <- "cmid"
+
+mcs_autism_IQ <- mcs_ID_identifier[mcs_ID_identifier$mcs_cog_pca.MCSID %in% MCS_sdq_autism$MCSID, ]
+mcs_autism_IQ <- mcs_autism_IQ[,2:6]
+colnames(mcs_autism_IQ) <- c("MCSID","CNUM00","CMID","PC1","ID")
+mcs1_ethnicity <- mcs_ethnicity_mbirth_age[,2:6]
+mcs1_birth_age <- mcs_ethnicity_mbirth_age[,c(2,7,8)]
+mcs_autism_eth <- mcs1_ethnicity[mcs1_ethnicity$MCSID %in% MCS_sdq_autism$MCSID, ]
+mcs_autism_mbirthage <- mcs1_birth_age[mcs1_birth_age$MCSID %in% MCS_sdq_autism$MCSID, ]
+
+mcs_autism_other_ses <- mcs2_other_ses_identifier[mcs2_other_ses_identifier$MCSID %in% MCS_sdq_autism$MCSID,]
+mcs_autism_other_ses <- mcs_autism_other_ses[,c(2:6,8)]
+
+mcs_autism_dep <- mcs2_dep_identifier[mcs2_dep_identifier$MCSID %in% MCS_sdq_autism$MCSID, ]
+mcs_autism_dep <- mcs_autism_dep[,1:8]
+
+all_tip_list = list(mcs_autism_IQ, mcs_autism_eth, mcs_autism_mbirthage, mcs_autism_other_ses, mcs_autism_dep)
+mcs_autism_all_tip <- all_tip_list %>% reduce(inner_join, by = "MCSID")  
+mcs_autism_all_tip <- mcs_autism_all_tip[!duplicated(mcs_autism_all_tip$CMID), ]
+# n =125, f:M = 35:90
+
+
+
+
+mcs_autism_all_tip_gmm <- inner_join(mcs_autism_all_tip, mcs_gmm_2_group, by = "MCSID")
+mcs_autism_all_tip_gmm <- mcs_autism_all_tip_gmm[,c(1:3,28,27,4,7:23,29:34)]
+colnames(mcs_autism_all_tip_gmm) <- c("MCSID","CNUM00","CMID","Sex","diag.age" ,"IQ","Eth","Eth_11","Eth_8","MBA"   ,"mBirthdage_grp","IncomeQuant","LabourMrtSts","OECDPov","HouseTen","SES","ccountry","dep_Overall", "dep_Income","dep_Employment","dep_HealthDisability","dep_EduSkillTrain","dep","ttl","emo","con","hyp","peer","pro")
+
+
+mcs_autism_all_tip_gmm$group <- ifelse(mcs_autism_all_tip_gmm$diag.age <= 11, "early", "late")
+variables_of_interest <- c("IQ", "MBA","SES","dep")
+group_variable <- "group"
+
+# test for any significant differences or associations between variables
+for (var in variables_of_interest) {
+  mwu_result <- wilcox.test(mcs_autism_all_tip_gmm[[var]] ~ mcs_autism_all_tip_gmm[[group_variable]])
+  print(paste("Mann-Whitney U Test for", var))
+  print(mwu_result)
+}
+
+categorical_variables <- c("Eth", "ccountry")
+group_variable <- "group"
+
+for (var in categorical_variables) {
+  chisq_result <- chisq.test(table(mcs_autism_all_tip_gmm[[var]], mcs_autism_all_tip_gmm[[group_variable]]))
+  print(paste("Chi-Square Test for", var))
+  print(chisq_result)
+}
+
+for (var in categorical_variables) {
+  fisher_result <- fisher.test(table(mcs_autism_all_tip_gmm[[var]], mcs_autism_all_tip_gmm[[group_variable]]))
+  print(paste("Fisher Test for", var))
+  print(fisher_result)
+  
+}
+
+
+# Regression
+
+mcs_autism_all_tip_gmm$eth <- ifelse(mcs_autism_all_tip_gmm$Eth == 1, 0,1)
+fit_all <- lm(diag.age ~ Sex + IQ + eth + MBA + SES + dep + ttl + emo + con + hyp + peer + pro, data= mcs_autism_all_tip_gmm)
+summary(fit_all)
+tab_model(fit_all)
+# test for multi-collinearity
+vif(fit_all)
+# regression diagnostics to validate the assumption of normally distributed residuals
+residuals_fit_all <- residuals(fit_all)
+qqnorm(residuals_fit_all)
+qqline(residuals_fit_all)
+shapiro.test(residuals_fit_all)
+hist(residuals_fit_all)
+
+
+
+##  mediation analysis
+# scaling 
+mcs_autism_all_tip_gmm_s <- mcs_autism_all_tip_gmm %>%
+  mutate_at(c(5,6,10:29), funs(c(scale(.))))
+
+
+# Create the mediation model
+
+model_1 <- "
+  # direct effects
+  diag.age ~ Sex + IQ + eth + MBA + SES + dep + ttl + emo + con + hyp + peer + pro
+  "
+fit_1 <- lavaan::sem(model_1, data = mcs_autism_all_tip_gmm_s)
+fit_1.cor <- lavInspect(fit_1, "cor.all")
+fit_1.cor
+
+# dominance analysis
+dominance.manual(fit_1.cor)
+
+
+model_2 <- "
+
+  diag.age ~ s*Sex + i*IQ + e*eth + m*MBA + se*SES + de*dep + t*ttl + em*emo + co*con + h*hyp + p*peer + pr*pro
+
+  ttl ~ i1*IQ + de1*dep + se1*SES + m1*MBA + s1*Sex + e1*eth
+  emo ~ i2*IQ + de2*dep + se2*SES + m2*MBA + s2*Sex + e2*eth
+  con ~ i3*IQ + de3*dep + se3*SES + m3*MBA + s3*Sex + e3*eth
+  hyp ~ i4*IQ + de4*dep + se4*SES + m4*MBA + s4*Sex+ e4*eth
+  peer ~ i5*IQ + de5*dep + se5*SES + m5*MBA + s5*Sex+ e5*eth
+  pro ~ i6*IQ + de6*dep + se6*SES + m6*MBA + s6*Sex+ e6*eth
+  
+  
+ indirect_ttl := i1*t  +de1*t+se1*t+m1*t +s1*t+ e1*t
+ indirect_emo := i2*em  +de2*em+se2*em+m2*em +s2*em+ e2*em
+ indirect_con := i3*co  +de3*co+se3*co+m3*co +s3*co+ e3*co
+ indirect_hyp := i4*h  +de4*h+se4*h+m4*h +s4*h+ e4*h
+ indirect_peer := i5*p  +de5*p+se5*p+m5*p +s5*p+ e5*p
+ indirect_pro := i6*pr  +de6*pr+se6*pr+m6*pr +s6*pr+ e6*pr
+ 
+direct := s + i + e +m + se + de
+total_indirect := indirect_ttl + indirect_emo + indirect_con + indirect_hyp + indirect_peer + indirect_pro
+total := direct + total_indirect
+  
+"
+set.seed(060524)
+serial_mcs_fit <- lavaan::sem(model_2, data = mcs_autism_all_tip_gmm_s, se = "bootstrap",
+    missing = "fiml", bootstrap = 1000)
+serial_mcs_fit_sum <- lavaan::summary(serial_mcs_fit, standardized = TRUE, rsq = T,
+    fit = TRUE, ci = TRUE)
+serial_mcs_fit_ParEsts <- lavaan::parameterEstimates(serial_mcs_fit, boot.ci.type = "bca.simple",standardized = TRUE)
+serial_mcs_fit_sum
+serial_mcs_fit_ParEsts
