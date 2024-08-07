@@ -1,13 +1,4 @@
----
-title: "Propensity score matching"
-author: "X.Zhang"
-date: "2024-06-24"
-output: html_document
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+######## I think I've sent this to Varun and it would make more sense if he includes this on his side (genetic analyses). #############
 
 ## Load data and packages
 ```{r}
