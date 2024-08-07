@@ -1,0 +1,118 @@
+---
+title: "Propensity score matching"
+author: "X.Zhang"
+date: "2024-06-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load data and packages
+```{r}
+library(readr)
+library(haven)
+library(purrr)
+library(dplyr)
+# ALSPAC
+
+alspac <- read_csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/Genetics_data_forYira/ALSPAC/B4244_Martin _2Feb2024.csv")
+
+# MCS                 
+mcs_cog_ass <- read_sav("/Users/zhangxinhe/Documents/who recieves a diagnosis/Genetics_data_forYira/MCS/GDAC_2023_05_WARRIER_mcs_cm_structure_pheno_data_2023-08-16_16-22-56.sav")
+mcs_hh <- read_sav("/Users/zhangxinhe/Documents/who recieves a diagnosis/Genetics_data_forYira/MCS/GDAC_2023_05_WARRIER_mcs_data_struct_fam_imd_2023-08-16_16-46-33.sav")
+mcs_family <- read_sav("/Users/zhangxinhe/Documents/who recieves a diagnosis/Genetics_data_forYira/MCS/GDAC_2023_05_WARRIER_mcs_family_structure_pheno_data_2023-08-16_16-22-56.sav", encoding = "latin1")
+mcs_parent_cm <- read_sav("/Users/zhangxinhe/Documents/who recieves a diagnosis/Genetics_data_forYira/MCS/GDAC_2023_05_WARRIER_mcs_parent_cm_structure_pheno_data_2023-08-16_16-22-56.sav",encoding = "latin1")
+mcs_parent_interview <- read_sav("/Users/zhangxinhe/Documents/who recieves a diagnosis/Genetics_data_forYira/MCS/GDAC_2023_05_WARRIER_mcs_parent_structure_pheno_data_2023-08-16_16-22-56.sav",encoding = "latin1")
+```
+
+
+```{r}
+# Extract variable info
+info_mcs_cog_ass <- data.frame(
+  Variable = names(mcs_cog_ass),
+  Label = sapply(mcs_cog_ass, function(x) attr(x, "label")),
+  stringsAsFactors = FALSE) 
+info_mcs_cog_ass$data <- "cog"
+info_mcs_hh <- data.frame(
+  Variable = names(mcs_hh),
+  Label = sapply(mcs_hh, function(x) attr(x, "label")),
+  stringsAsFactors = FALSE)
+info_mcs_hh$data <- "hh"
+info_mcs_family <- data.frame(
+  Variable = names(mcs_family),
+  Label = sapply(mcs_family, function(x) attr(x, "label")),
+  stringsAsFactors = FALSE)
+info_mcs_family$data <- "family"
+info_mcs_parent_cm <- data.frame(
+  Variable = names(mcs_parent_cm),
+  Label = sapply(mcs_parent_cm, function(x) attr(x, "label")),
+  stringsAsFactors = FALSE)
+info_mcs_parent_cm$data <- "parent_cm"
+info_mcs_parent_interview <- data.frame(
+  Variable = names(mcs_parent_interview),
+  Label = sapply(mcs_parent_interview, function(x) attr(x, "label")),
+  stringsAsFactors = FALSE)
+info_mcs_parent_interview$data <- "parent_int"
+
+# List all data frames that start with info_
+data_frames <- mget(ls(pattern = "^info_"))
+
+# Concatenate them into one data frame
+combined_mcs_info <- bind_rows(data_frames)
+
+```
+
+# Extract demographnic variables for matching
+## ALSPAC
+```{r}
+# sex, age, maternal education, maternal age at birth, English not the only language exposed to
+# mz028b: maternal age at birth
+
+# c645a: mum highest edu qualifications(0	= None,1 =	CSE, 2 =	Vocational,3 =	O level,4 =	A level,5 =	Degree)
+
+# kz021: sex  (1 = male,2 = female)
+
+# cf442: English is child's mother tongue -speech 25 mth
+
+# f8sl201: S&L - Your study child uses another language regularly: F8
+
+alspac_ps <- alspac %>% select(cidB4244,qlet,kz021,mz028b,c645a, cf442, f8sl201) %>% mutate(across(everything(), ~ ifelse(. < 0 | . == 9999, NA, .))) 
+
+
+alspac_ps_complete <- alspac_ps %>% na.omit()
+view(alspac_ps_complete)
+```
+
+## MCS
+```{r}
+# Exposure to language not English
+EPRASN0M,EPRSEX0P,FPRSEN0Q,GPSDQTRANS1
+
+# Maternal age at delivery XDDRES00 == 1 Natural mother interview
+ADDAGB00,BDDAGB00
+
+# S6 DV Respondent NVQ Highest Level (all sweeps)
+FDNVQ00
+
+# Mother's highest educational qualification : first sweep used here as same data were recorded during pregnancy in LASPAC
+# NVQ comparisons https://www.cityandguilds.com/qualifications-and-apprenticeships/qualifications-explained/qualification-comparisons 
+# GCSE 1,2; A-level 3; degree and above 4
+mcs_ps <- mcs_parent_interview %>% filter(ADDRES00 == 1 & BDDRES00 == 1) %>% select(WARRIER_SID,WARRIER_FID,ADACAQ00,ADDAGB00,BDDAGB00)
+mcs_ps[3:5] <- lapply(mcs_ps[3:5], as.numeric)
+mcs_ps <- mcs_ps %>% mutate(across(everything(), ~ ifelse(. < 0 | . == 96 | . == 95, NA, .))) 
+mcs_ps <- mcs_ps %>% mutate(edu_match = case_when(
+  ADACAQ00 %in% c(1,2) ~ 2,
+  ADACAQ00 == 3 ~ 3,
+  ADACAQ00 %in% c(4,5) ~ 4,
+  is.na(ADACAQ00) ~ 1
+))
+table(mcs_ps$ADACAQ00)
+table(mcs_ps$edu_match)
+mcs_ps_language <- mcs_parent_cm %>% select(WARRIER_SID,WARRIER_FID,EPRASN0M,EPRSEX0P,FPRSEN0Q, GPSDQTRANS1) 
+summary(mcs_ps_language)
+
+view(mcs_ps)
+
+```

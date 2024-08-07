@@ -1,0 +1,656 @@
+---
+title: "MCS_C_male_only_analysis"
+author: "Yira Zhang"
+date: "2024-06-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+
+# Cr. Genie
+MCS_autism <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_autism.csv") # 188 in total
+MCS_sdq_autism <- MCS_autism[,c(1:21,34:39,22:33,40:45)]
+MCS_sdq_autism$sex_num <- ifelse(MCS_sdq_autism$Sex =="Male", 1, 2)
+#MCS_adhd <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_adhd.csv") # 89 in total
+#MCS_sdq_adhd <- MCS_adhd[,c(1:21,34:39,22:33,40:45)]
+#MCS_autism_adhd_both <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_both.csv")
+#MCS_sdq_both <- MCS_autism_adhd_both[,c(1:21,34:39,22:33,40:45)]
+MCS_no_diag <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_control.csv") # 6047 in total
+MCS_no_diag$sex_num <- ifelse(MCS_no_diag$Sex == "Male", 1,2)
+MCS_no_diag$grp <- "no_diag"
+MCS_no_diag$grp_num <- 3
+MCS_sdq_no_diag <- MCS_no_diag[,c(1:21,34:39,22:33,40:45)]
+
+mcs2_parent_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_interview.tab")
+mcs_ID_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ID_identifier.csv")
+mcs_ethnicity_mbirth_age <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_race_mbirthage.csv")
+mcs2_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ses_identifier.csv")
+mcs2_dep_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_deprivation_identifier.csv")
+mcs2_family_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_family_derived.tab")
+mcs2_other_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_other_ses_identifier.csv")
+MCS_sdq_autism_early <- MCS_sdq_autism %>% filter (ASD.Diagnosis.Age %in% c("at W3","at W4","at W5")) # n = 118
+
+MCS_sdq_autism_late <- MCS_sdq_autism %>% filter (ASD.Diagnosis.Age %in% c("at W6")) # n = 70
+MCS_sdq_autism$grp <- ifelse(MCS_sdq_autism$ASD.Diagnosis.Age %in% c("at W3","at W4","at W5"), "Early", ifelse(MCS_sdq_autism$ASD.Diagnosis.Age %in% c("at W6"), "Late", NA))
+MCS_sdq_autism$grp_num <- ifelse(MCS_sdq_autism$ASD.Diagnosis.Age %in% c("at W3","at W4","at W5"), 1, ifelse(MCS_sdq_autism$ASD.Diagnosis.Age %in% c("at W6"), 2, NA))
+MCS_sdq_all <- rbind(MCS_no_diag,MCS_sdq_autism)
+```
+# z-test function
+
+```{r}
+calc_z_p_values <- function(est1, se1, est2, se2) {
+  z_score <- (est1 - est2) / sqrt(se1^2 + se2^2)
+  p_value <- 2 * (1 - pnorm(abs(z_score)))
+  return(c(z_score, p_value))
+}
+
+```
+
+# LGCM 
+# Total
+```{r}
+library(lavaan)
+mcs_agestr_ttl_male <- "
+int =~ 1*BEBDTOT + 1*CEBDTOT + 1*DDDEBDTOT + 1*EEBDTOT + 1*FEBDTOT + 1*GEBDTOT
+slp =~ 3*BEBDTOT + 5*CEBDTOT + 7*DDDEBDTOT + 11*EEBDTOT + 14*FEBDTOT + 17*GEBDTOT
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+mcs_agestr_ttl_fit_boy <- growth(mcs_agestr_ttl_male, data = MCS_sdq_all[MCS_sdq_all$Sex == "Male",], group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+summary(mcs_agestr_ttl_fit_boy)
+```
+
+# Emotional symptoms
+```{r}
+
+mcs_agestr_emo_male <- "
+int =~ 1*BEMOTION + 1*CEMOTION + 1*DDEMOTION + 1*EEMOTION + 1*FEMOTION + 1*GEMOTION
+slp =~ 3*BEMOTION + 5*CEMOTION + 7*DDEMOTION + 11*EEMOTION + 14*FEMOTION + 17*GEMOTION
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+mcs_agestr_emo_fit_boy <- growth(mcs_agestr_emo_male, data = MCS_sdq_all[MCS_sdq_all$Sex == "Male",], group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_emo_fit_boy)
+```
+
+# Conduct problems
+```{r}
+
+mcs_agestr_con_male <- "
+int =~ 1*BCONDUCT + 1*CCONDUCT + 1*DDCONDUCT + 1*ECONDUCT + 1*FCONDUCT + 1*GCONDUCT
+slp =~ 3*BCONDUCT + 5*CCONDUCT + 7*DDCONDUCT + 11*ECONDUCT + 14*FCONDUCT + 17*GCONDUCT
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+mcs_agestr_con_fit_boy <- growth(mcs_agestr_con_male, data = MCS_sdq_all[MCS_sdq_all$Sex == "Male",], group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_con_fit_boy)
+```
+# Hyperactivity
+```{r}
+
+mcs_agestr_hyp_male <- "
+int =~ 1*BHYPER + 1*CHYPER + 1*DDHYPER + 1*EHYPER + 1*FHYPER + 1*GHYPER
+slp =~ 3*BHYPER + 5*CHYPER + 7*DDHYPER + 11*EHYPER + 14*FHYPER + 17*GHYPER
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+mcs_agestr_hyp_fit_boy <- growth(mcs_agestr_hyp_male, data = MCS_sdq_all[MCS_sdq_all$Sex == "Male",], group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_hyp_fit_boy)
+```
+# Peer relationship problems
+```{r}
+
+mcs_agestr_peer_male <- "
+int =~ 1*BPEER + 1*CPEER + 1*DDPEER + 1*EPEER + 1*FPEER + 1*GPEER
+slp =~ 3*BPEER + 5*CPEER + 7*DDPEER + 11*EPEER + 14*FPEER + 17*GPEER
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+mcs_agestr_peer_fit_boy <- growth(mcs_agestr_peer_male, data = MCS_sdq_all[MCS_sdq_all$Sex == "Male",], group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_peer_fit_boy)
+```
+# Prosocial behaviours
+
+```{r}
+
+mcs_agestr_pro_male <- "
+int =~ 1*BPROSOC + 1*CPROSOC + 1*DDPROSOC + 1*EPROSOC + 1*FPROSOC + 1*GPROSOC
+slp =~ 3*BPROSOC + 5*CPROSOC + 7*DDPROSOC + 11*EPROSOC + 14*FPROSOC + 17*GPROSOC
+
+# the parametres for slope reflect the designed ages at corresponding sweeps
+"
+mcs_agestr_pro_fit_boy <- growth(mcs_agestr_pro_male, data = MCS_sdq_all[MCS_sdq_all$Sex == "Male",], group = "grp_num",  missing = "fiml", estimator = "ml", fixed.x = F)
+#summary(mcs_agestr_pro_fit_boy)
+```
+
+
+# Table
+```{r}
+est_mcs_agestr_ttl_fit_boy <- parameterEstimates(mcs_agestr_ttl_fit_boy) %>% filter(grepl("int|slp|qua",lhs) & op == "~1")
+results_mcs_agestr_ttl_fit_boy <- est_mcs_agestr_ttl_fit_boy %>%
+  dplyr::select(lhs, group, est, ci.lower, ci.upper, pvalue) %>%
+ mutate(Estimates = sprintf("%.2f [%0.2f, %0.2f]", est, ci.lower, ci.upper),
+         p_value = sprintf("%.3f", pvalue)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+results_mcs_agestr_ttl_fit_boy
+
+
+est_mcs_agestr_emo_fit_boy <- parameterEstimates(mcs_agestr_emo_fit_boy) %>% filter(grepl("int|slp|qua",lhs) & op == "~1")
+results_mcs_agestr_emo_fit_boy <- est_mcs_agestr_emo_fit_boy %>%
+  dplyr::select(lhs, group, est, ci.lower, ci.upper, pvalue) %>%
+ mutate(Estimates = sprintf("%.2f [%0.2f, %0.2f]", est, ci.lower, ci.upper),
+         p_value = sprintf("%.3f", pvalue)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+results_mcs_agestr_emo_fit_boy
+
+est_mcs_agestr_con_fit_boy <- parameterEstimates(mcs_agestr_con_fit_boy) %>% filter(grepl("int|slp|qua",lhs) & op == "~1")
+results_mcs_agestr_con_fit_boy <- est_mcs_agestr_con_fit_boy %>%
+  dplyr::select(lhs, group, est, ci.lower, ci.upper, pvalue) %>%
+ mutate(Estimates = sprintf("%.2f [%0.2f, %0.2f]", est, ci.lower, ci.upper),
+         p_value = sprintf("%.3f", pvalue)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+results_mcs_agestr_con_fit_boy
+
+est_mcs_agestr_hyp_fit_boy <- parameterEstimates(mcs_agestr_hyp_fit_boy) %>% filter(grepl("int|slp|qua",lhs) & op == "~1")
+results_mcs_agestr_hyp_fit_boy <- est_mcs_agestr_hyp_fit_boy %>%
+  dplyr::select(lhs, group, est, ci.lower, ci.upper, pvalue) %>%
+ mutate(Estimates = sprintf("%.2f [%0.2f, %0.2f]", est, ci.lower, ci.upper),
+         p_value = sprintf("%.3f", pvalue)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+results_mcs_agestr_hyp_fit_boy
+
+est_mcs_agestr_peer_fit_boy <- parameterEstimates(mcs_agestr_peer_fit_boy) %>% filter(grepl("int|slp|qua",lhs) & op == "~1")
+results_mcs_agestr_peer_fit_boy <- est_mcs_agestr_peer_fit_boy %>%
+  dplyr::select(lhs, group, est, ci.lower, ci.upper, pvalue) %>%
+ mutate(Estimates = sprintf("%.2f [%0.2f, %0.2f]", est, ci.lower, ci.upper),
+         p_value = sprintf("%.3f", pvalue)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+results_mcs_agestr_peer_fit_boy
+
+est_mcs_agestr_pro_fit_boy <- parameterEstimates(mcs_agestr_pro_fit_boy) %>% filter(grepl("int|slp|qua",lhs) & op == "~1")
+results_mcs_agestr_pro_fit_boy <- est_mcs_agestr_pro_fit_boy %>%
+  dplyr::select(lhs, group, est, ci.lower, ci.upper, pvalue) %>%
+ mutate(Estimates = sprintf("%.2f [%0.2f, %0.2f]", est, ci.lower, ci.upper),
+         p_value = sprintf("%.3f", pvalue)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+results_mcs_agestr_pro_fit_boy
+```
+
+# Z test of difference of intercept and slope between groups
+## Total
+```{r}
+male_ttl_early <- est_mcs_agestr_ttl_fit_boy %>% filter(lhs %in% c("int","slp") & group == 3) %>% select(lhs,est,se)
+male_ttl_late <- est_mcs_agestr_ttl_fit_boy %>% filter(lhs %in% c("int","slp")& group == 2) %>% select(lhs,est,se)
+male_int_ttl_mean_early <- male_ttl_early[1,"est"]
+male_int_ttl_se_early <- male_ttl_early[1,"se"]
+male_slp_ttl_mean_early <- male_ttl_early[2,"est"]
+male_slp_ttl_se_early <- male_ttl_early[2,"se"]
+male_int_ttl_mean_late <- male_ttl_late[1,"est"]
+male_int_ttl_se_late <- male_ttl_late[1,"se"]
+male_slp_ttl_mean_late <- male_ttl_late[2,"est"]
+male_slp_ttl_se_late <- male_ttl_late[2,"se"]
+
+male_ttl_int <- calc_z_p_values(male_int_ttl_mean_early,male_int_ttl_se_early,male_int_ttl_mean_late,male_int_ttl_se_late)
+
+male_ttl_slp <- calc_z_p_values(male_slp_ttl_mean_early,male_slp_ttl_se_early,male_slp_ttl_mean_late,male_slp_ttl_se_late)
+
+male_ttl_int
+male_ttl_slp
+```
+## Emotional
+```{r}
+male_emo_early <- est_mcs_agestr_emo_fit_boy %>% filter(lhs %in% c("int","slp") & group == 3) %>% select(lhs,est,se)
+male_emo_late <- est_mcs_agestr_emo_fit_boy %>% filter(lhs %in% c("int","slp")& group == 2) %>% select(lhs,est,se)
+male_int_emo_mean_early <- male_emo_early[1,"est"]
+male_int_emo_se_early <- male_emo_early[1,"se"]
+male_slp_emo_mean_early <- male_emo_early[2,"est"]
+male_slp_emo_se_early <- male_emo_early[2,"se"]
+male_int_emo_mean_late <- male_emo_late[1,"est"]
+male_int_emo_se_late <- male_emo_late[1,"se"]
+male_slp_emo_mean_late <- male_emo_late[2,"est"]
+male_slp_emo_se_late <- male_emo_late[2,"se"]
+
+male_emo_int <- calc_z_p_values(male_int_emo_mean_early,male_int_emo_se_early,male_int_emo_mean_late,male_int_emo_se_late)
+
+male_emo_slp <- calc_z_p_values(male_slp_emo_mean_early,male_slp_emo_se_early,male_slp_emo_mean_late,male_slp_emo_se_late)
+
+male_emo_int
+male_emo_slp
+```
+
+## Conduct
+```{r}
+male_con_early <- est_mcs_agestr_con_fit_boy %>% filter(lhs %in% c("int","slp") & group == 3) %>% select(lhs,est,se)
+male_con_late <- est_mcs_agestr_con_fit_boy %>% filter(lhs %in% c("int","slp")& group == 2) %>% select(lhs,est,se)
+male_int_con_mean_early <- male_con_early[1,"est"]
+male_int_con_se_early <- male_con_early[1,"se"]
+male_slp_con_mean_early <- male_con_early[2,"est"]
+male_slp_con_se_early <- male_con_early[2,"se"]
+male_int_con_mean_late <- male_con_late[1,"est"]
+male_int_con_se_late <- male_con_late[1,"se"]
+male_slp_con_mean_late <- male_con_late[2,"est"]
+male_slp_con_se_late <- male_con_late[2,"se"]
+
+male_con_int <- calc_z_p_values(male_int_con_mean_early,male_int_con_se_early,male_int_con_mean_late,male_int_con_se_late)
+
+male_con_slp <- calc_z_p_values(male_slp_con_mean_early,male_slp_con_se_early,male_slp_con_mean_late,male_slp_con_se_late)
+
+male_con_int
+male_con_slp
+```
+
+## Hyperactivity
+```{r}
+male_hyp_early <- est_mcs_agestr_hyp_fit_boy %>% filter(lhs %in% c("int","slp") & group == 3) %>% select(lhs,est,se)
+male_hyp_late <- est_mcs_agestr_hyp_fit_boy %>% filter(lhs %in% c("int","slp")& group == 2) %>% select(lhs,est,se)
+male_int_hyp_mean_early <- male_hyp_early[1,"est"]
+male_int_hyp_se_early <- male_hyp_early[1,"se"]
+male_slp_hyp_mean_early <- male_hyp_early[2,"est"]
+male_slp_hyp_se_early <- male_hyp_early[2,"se"]
+male_int_hyp_mean_late <- male_hyp_late[1,"est"]
+male_int_hyp_se_late <- male_hyp_late[1,"se"]
+male_slp_hyp_mean_late <- male_hyp_late[2,"est"]
+male_slp_hyp_se_late <- male_hyp_late[2,"se"]
+
+male_hyp_int <- calc_z_p_values(male_int_hyp_mean_early,male_int_hyp_se_early,male_int_hyp_mean_late,male_int_hyp_se_late)
+
+male_hyp_slp <- calc_z_p_values(male_slp_hyp_mean_early,male_slp_hyp_se_early,male_slp_hyp_mean_late,male_slp_hyp_se_late)
+
+male_hyp_int
+male_hyp_slp
+```
+
+## Peer relationship
+```{r}
+male_peer_early <- est_mcs_agestr_peer_fit_boy %>% filter(lhs %in% c("int","slp") & group == 3) %>% select(lhs,est,se)
+male_peer_late <- est_mcs_agestr_peer_fit_boy %>% filter(lhs %in% c("int","slp")& group == 2) %>% select(lhs,est,se)
+male_int_peer_mean_early <- male_peer_early[1,"est"]
+male_int_peer_se_early <- male_peer_early[1,"se"]
+male_slp_peer_mean_early <- male_peer_early[2,"est"]
+male_slp_peer_se_early <- male_peer_early[2,"se"]
+male_int_peer_mean_late <- male_peer_late[1,"est"]
+male_int_peer_se_late <- male_peer_late[1,"se"]
+male_slp_peer_mean_late <- male_peer_late[2,"est"]
+male_slp_peer_se_late <- male_peer_late[2,"se"]
+
+male_peer_int <- calc_z_p_values(male_int_peer_mean_early,male_int_peer_se_early,male_int_peer_mean_late,male_int_peer_se_late)
+
+male_peer_slp <- calc_z_p_values(male_slp_peer_mean_early,male_slp_peer_se_early,male_slp_peer_mean_late,male_slp_peer_se_late)
+
+male_peer_int
+male_peer_slp
+```
+
+## Prosocial
+```{r}
+male_pro_early <- est_mcs_agestr_pro_fit_boy %>% filter(lhs %in% c("int","slp") & group == 3) %>% select(lhs,est,se)
+male_pro_late <- est_mcs_agestr_pro_fit_boy %>% filter(lhs %in% c("int","slp")& group == 2) %>% select(lhs,est,se)
+male_int_pro_mean_early <- male_pro_early[1,"est"]
+male_int_pro_se_early <- male_pro_early[1,"se"]
+male_slp_pro_mean_early <- male_pro_early[2,"est"]
+male_slp_pro_se_early <- male_pro_early[2,"se"]
+male_int_pro_mean_late <- male_pro_late[1,"est"]
+male_int_pro_se_late <- male_pro_late[1,"se"]
+male_slp_pro_mean_late <- male_pro_late[2,"est"]
+male_slp_pro_se_late <- male_pro_late[2,"se"]
+
+male_pro_int <- calc_z_p_values(male_int_pro_mean_early,male_int_pro_se_early,male_int_pro_mean_late,male_int_pro_se_late)
+
+male_pro_slp <- calc_z_p_values(male_slp_pro_mean_early,male_slp_pro_se_early,male_slp_pro_mean_late,male_slp_pro_se_late)
+
+male_pro_int
+male_pro_slp
+```
+
+
+
+### GMM
+
+```{r}
+MCS_autism <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_autism.csv") # 188 in total
+MCS_sdq_autism <- MCS_autism[,c(1:21,34:39,22:33,40:45)] 
+MCS_sdq_autism <- dplyr::mutate(MCS_sdq_autism, numericID = row_number())
+MCS_sdq_autism_male <- MCS_sdq_autism[MCS_sdq_autism$Sex == "Male",]
+MCS_sdq_autism_male <- MCS_sdq_autism_male %>%
+  dplyr::mutate(diag.age = case_when(
+    ASD.Diagnosis.Age == "at W3" ~ 5,
+    ASD.Diagnosis.Age == "at W4" ~ 7,
+    ASD.Diagnosis.Age == "at W5" ~ 11,
+    ASD.Diagnosis.Age == "at W6" ~ 14)
+    )
+MCS_autism_wide_sdq_total_m <- MCS_sdq_autism_male[,c("numericID","MCSID","diag.age","BEBDTOT","CEBDTOT", "DDDEBDTOT" ,"EEBDTOT","FEBDTOT","GEBDTOT")]
+MCS_autism_long_sdq_total_m <- melt(setDT(MCS_autism_wide_sdq_total_m), id.vars = c("numericID","MCSID","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_total_m <- MCS_autism_long_sdq_total_m %>%
+  dplyr::mutate(Sweep = case_when(
+    sweep == "BEBDTOT" ~ 2,
+    sweep == "CEBDTOT" ~ 3,
+    sweep == "DDDEBDTOT" ~ 4,
+    sweep == "EEBDTOT" ~ 5,
+    sweep == "FEBDTOT" ~ 6,
+    sweep == "GEBDTOT" ~ 7)
+    ) %>% dplyr::mutate(Sweep.age = case_when(
+    sweep == "BEBDTOT" ~ 3,
+    sweep == "CEBDTOT" ~ 5,
+    sweep == "DDDEBDTOT" ~ 7,
+    sweep == "EEBDTOT" ~ 11,
+    sweep == "FEBDTOT" ~ 14,
+    sweep == "GEBDTOT" ~ 17)
+    )
+
+
+MCS_autism_wide_sdq_emo_m <- MCS_sdq_autism_male[,c("numericID","MCSID","diag.age","BEMOTION","CEMOTION", "DDEMOTION","EEMOTION","FEMOTION","GEMOTION")]
+MCS_autism_long_sdq_emo_m <- melt(setDT(MCS_autism_wide_sdq_emo_m), id.vars = c("numericID","MCSID","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_emo_m <- MCS_autism_long_sdq_emo_m %>%
+  dplyr::mutate(Sweep = case_when(
+    sweep == "BEMOTION" ~ 2,
+    sweep == "CEMOTION" ~ 3,
+    sweep == "DDEMOTION" ~ 4,
+    sweep == "EEMOTION" ~ 5,
+    sweep == "FEMOTION" ~ 6,
+    sweep == "GEMOTION" ~ 7)
+    ) %>%
+  dplyr::mutate(Sweep.age = case_when(
+    sweep == "BEMOTION" ~ 3,
+    sweep == "CEMOTION" ~ 5,
+    sweep == "DDEMOTION" ~ 7,
+    sweep == "EEMOTION" ~ 11,
+    sweep == "FEMOTION" ~ 14,
+    sweep == "GEMOTION" ~ 17)
+    ) 
+
+
+MCS_autism_wide_sdq_con_m <- MCS_sdq_autism_male[,c("numericID","MCSID","diag.age","BCONDUCT","CCONDUCT","DDCONDUCT","ECONDUCT","FCONDUCT","GCONDUCT")]
+MCS_autism_long_sdq_con_m <- melt(setDT(MCS_autism_wide_sdq_con_m), id.vars = c("numericID","MCSID","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_con_m <- MCS_autism_long_sdq_con_m %>%
+  dplyr::mutate(Sweep = case_when(
+    sweep == "BCONDUCT" ~ 2,
+    sweep == "CCONDUCT" ~ 3,
+    sweep == "DDCONDUCT" ~ 4,
+    sweep == "ECONDUCT" ~ 5,
+    sweep == "FCONDUCT" ~ 6,
+    sweep == "GCONDUCT" ~ 7)
+    )%>%
+  dplyr::mutate(Sweep.age = case_when(
+    sweep == "BCONDUCT" ~ 3,
+    sweep == "CCONDUCT" ~ 5,
+    sweep == "DDCONDUCT" ~ 7,
+    sweep == "ECONDUCT" ~ 11,
+    sweep == "FCONDUCT" ~ 14,
+    sweep == "GCONDUCT" ~ 17)
+    ) 
+
+
+
+MCS_autism_wide_sdq_hyp_m <- MCS_sdq_autism_male[,c("numericID","MCSID","diag.age","BHYPER","CHYPER","DDHYPER","EHYPER","FHYPER","GHYPER")]
+MCS_autism_long_sdq_hyp_m <- melt(setDT(MCS_autism_wide_sdq_hyp_m), id.vars = c("numericID","MCSID","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_hyp_m <- MCS_autism_long_sdq_hyp_m %>%
+  dplyr::mutate(Sweep = case_when(
+    sweep == "BHYPER" ~ 2,
+    sweep == "CHYPER" ~ 3,
+    sweep == "DDHYPER" ~ 4,
+    sweep == "EHYPER" ~ 5,
+    sweep == "FHYPER" ~ 6,
+    sweep == "GHYPER" ~ 7)
+    ) %>%
+  dplyr::mutate(Sweep.age = case_when(
+    sweep == "BHYPER" ~ 3,
+    sweep == "CHYPER" ~ 5,
+    sweep == "DDHYPER" ~ 7,
+    sweep == "EHYPER" ~ 11,
+    sweep == "FHYPER" ~ 14,
+    sweep == "GHYPER" ~ 17)
+    ) 
+
+
+
+MCS_autism_wide_sdq_peer_m <- MCS_sdq_autism_male[,c("numericID","MCSID","diag.age","BPEER","CPEER","DDPEER","EPEER","FPEER","GPEER")]
+MCS_autism_long_sdq_peer_m <- melt(setDT(MCS_autism_wide_sdq_peer_m), id.vars = c("numericID","MCSID","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_peer_m <- MCS_autism_long_sdq_peer_m %>%
+  dplyr::mutate(Sweep = case_when(
+    sweep == "BPEER" ~ 2,
+    sweep == "CPEER" ~ 3,
+    sweep == "DDPEER" ~ 4,
+    sweep == "EPEER" ~ 5,
+    sweep == "FPEER" ~ 6,
+    sweep == "GPEER" ~ 7)
+    )%>%
+  dplyr::mutate(Sweep.age = case_when(
+    sweep == "BPEER" ~ 3,
+    sweep == "CPEER" ~ 5,
+    sweep == "DDPEER" ~ 7,
+    sweep == "EPEER" ~ 11,
+    sweep == "FPEER" ~ 14,
+    sweep == "GPEER" ~ 17)
+    ) 
+
+
+
+MCS_autism_wide_sdq_pro_m <- MCS_sdq_autism_male[,c("numericID","MCSID","diag.age","BPROSOC","CPROSOC","DDPROSOC","EPROSOC","FPROSOC","GPROSOC")]
+MCS_autism_long_sdq_pro_m <- melt(setDT(MCS_autism_wide_sdq_pro_m), id.vars = c("numericID","MCSID","diag.age"), variable.name = "sweep")
+MCS_autism_long_sdq_pro_m <- MCS_autism_long_sdq_pro_m %>%
+  dplyr::mutate(Sweep = case_when(
+    sweep == "BPROSOC" ~ 2,
+    sweep == "CPROSOC" ~ 3,
+    sweep == "DDPROSOC" ~ 4,
+    sweep == "EPROSOC" ~ 5,
+    sweep == "FPROSOC" ~ 6,
+    sweep == "GPROSOC" ~ 7)
+    )%>%
+  dplyr::mutate(Sweep.age = case_when(
+    sweep == "BPROSOC" ~ 3,
+    sweep == "CPROSOC" ~ 5,
+    sweep == "DDPROSOC" ~ 7,
+    sweep == "EPROSOC" ~ 11,
+    sweep == "FPROSOC" ~ 14,
+    sweep == "GPROSOC" ~ 17)
+    ) 
+
+age <- c("3","5","7","11","14","17")
+```
+```{r}
+
+mcs_ttl_gmm1_m <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_total_m)
+summary(mcs_ttl_gmm1_m)
+
+
+mcs_ttl_gmm2_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_total_m, mixture = ~ Sweep,
+nwg=T, B = mcs_ttl_gmm1_m)
+summary(mcs_ttl_gmm2_m)
+
+
+
+mcs_ttl_gmm3_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_total_m, mixture = ~ Sweep,
+nwg=T, B = mcs_ttl_gmm1_m)
+summary(mcs_ttl_gmm3_m)
+
+mcs_ttl_gmm4_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_total_m, mixture = ~ Sweep,
+nwg=T, B = mcs_ttl_gmm1_m)
+summary(mcs_ttl_gmm4_m)
+
+# make a table with results for the 3 models:
+fit_ind_m <- summarytable(mcs_ttl_gmm1_m, mcs_ttl_gmm2_m,mcs_ttl_gmm3_m,mcs_ttl_gmm4_m,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+```
+
+
+```{r}
+mcs_age <- c("3","5","7","11","14","17")
+MCS_autism_long_sdq_total_m$numericID <- as.character(MCS_autism_long_sdq_total_m$numericID)
+mcs_ttl_people2_m <- as.data.frame(mcs_ttl_gmm2_m$pprob[,1:2])
+MCS_autism_long_sdq_total_m$class <- factor(mcs_ttl_people2_m$class[sapply(MCS_autism_long_sdq_total_m$numericID, function(x) which(mcs_ttl_people2_m$numericID==x))])
+
+MCS_autism_long_sdq_total_m <- MCS_autism_long_sdq_total_m %>% dplyr::mutate(Sweep.age = case_when(Sweep == 2 ~ 3,                                                                          Sweep == 3 ~ 5, Sweep == 4 ~ 7, Sweep == 5 ~ 11, Sweep == 6 ~ 14, Sweep == 7 ~ 17 ))
+
+MCS_autism_long_sdq_total_m$Sweep.age <- as.numeric(MCS_autism_long_sdq_total_m$Sweep.age)
+
+
+my_colors <- brewer.pal(12, "Paired")[c(4,10)]
+p_mcs_ttl_gmm2_m <- ggplot(MCS_autism_long_sdq_total_m , aes(Sweep.age, value, group=numericID, colour=class)) + geom_line(size = 0.1) + geom_smooth(aes(group=class), method="loess", size=2, se=T)  + scale_y_continuous(limits = c(0,40)) + scale_x_continuous(breaks = as.numeric(mcs_age), labels = mcs_age) +scale_colour_manual(values = my_colors)+ labs(x="Age (years)",y="MCS SDQ Total Score-Males",colour="Latent Class") +theme_classic()+ theme(legend.position = "bottom") 
+
+
+suppressWarnings(print(p_mcs_ttl_gmm2_m))
+
+```
+```{r}
+my_colors_stack <- brewer.pal(12, "Paired")[c(4,10)]
+
+legend_labels <- c("Class 1","Class 2")
+strict_ttl_stack_m <- ggplot(MCS_autism_long_sdq_total_m,  aes(x = factor(diag.age), fill = class)) +geom_bar(position="fill") + scale_y_continuous(labels = scales::percent) +
+  labs(x = "Diagnosis Age", y = "Percentage") + scale_fill_manual(values = my_colors_stack, labels = legend_labels, name = "Class")+
+  theme_minimal() + theme(legend.position = "bottom")
+strict_ttl_stack_m
+
+
+
+```
+
+```{r}
+
+mcs_emo_gmm1_m <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_emo_m)
+summary(mcs_emo_gmm1_m)
+
+
+mcs_emo_gmm2_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_emo_m, mixture = ~ Sweep,
+nwg=T, B = mcs_emo_gmm1_m)
+summary(mcs_emo_gmm2_m)
+
+
+
+mcs_emo_gmm3_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_emo_m, mixture = ~ Sweep,
+nwg=T, B = mcs_emo_gmm1_m)
+summary(mcs_emo_gmm3_m)
+
+mcs_emo_gmm4_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_emo_m, mixture = ~ Sweep,
+nwg=T, B = mcs_emo_gmm1_m)
+summary(mcs_emo_gmm4_m)
+
+# make a table with results for the 3 models:
+fit_ind_m <- summarytable(mcs_emo_gmm1_m, mcs_emo_gmm2_m,mcs_emo_gmm3_m,mcs_emo_gmm4_m,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+```
+
+```{r}
+
+mcs_con_gmm1_m <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_con_m)
+summary(mcs_con_gmm1_m)
+
+
+mcs_con_gmm2_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_con_m, mixture = ~ Sweep,
+nwg=T, B = mcs_con_gmm1_m)
+summary(mcs_con_gmm2_m)
+
+
+
+mcs_con_gmm3_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_con_m, mixture = ~ Sweep,
+nwg=T, B = mcs_con_gmm1_m)
+summary(mcs_con_gmm3_m)
+
+mcs_con_gmm4_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_con_m, mixture = ~ Sweep,
+nwg=T, B = mcs_con_gmm1_m)
+summary(mcs_con_gmm4_m)
+
+# make a table with results for the 3 models:
+fit_ind_m <- summarytable(mcs_con_gmm1_m, mcs_con_gmm2_m,mcs_con_gmm3_m,mcs_con_gmm4_m,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+```
+
+```{r}
+
+mcs_hyp_gmm1_m <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_hyp_m)
+summary(mcs_hyp_gmm1_m)
+
+
+mcs_hyp_gmm2_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_hyp_m, mixture = ~ Sweep,
+nwg=T, B = mcs_hyp_gmm1_m)
+summary(mcs_hyp_gmm2_m)
+
+
+
+mcs_hyp_gmm3_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_hyp_m, mixture = ~ Sweep,
+nwg=T, B = mcs_hyp_gmm1_m)
+summary(mcs_hyp_gmm3_m)
+
+mcs_hyp_gmm4_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_hyp_m, mixture = ~ Sweep,
+nwg=T, B = mcs_hyp_gmm1_m)
+summary(mcs_hyp_gmm4_m)
+
+# make a table with results for the 3 models:
+fit_ind_m <- summarytable(mcs_hyp_gmm1_m, mcs_hyp_gmm2_m,mcs_hyp_gmm3_m,mcs_hyp_gmm4_m,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+```
+
+```{r}
+
+mcs_peer_gmm1_m <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_peer_m)
+summary(mcs_peer_gmm1_m)
+
+
+mcs_peer_gmm2_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_peer_m, mixture = ~ Sweep,
+nwg=T, B = mcs_peer_gmm1_m)
+summary(mcs_peer_gmm2_m)
+
+
+
+mcs_peer_gmm3_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_peer_m, mixture = ~ Sweep,
+nwg=T, B = mcs_peer_gmm1_m)
+summary(mcs_peer_gmm3_m)
+
+mcs_peer_gmm4_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_peer_m, mixture = ~ Sweep,
+nwg=T, B = mcs_peer_gmm1_m)
+summary(mcs_peer_gmm4_m)
+
+# make a table with results for the 3 models:
+fit_ind_m <- summarytable(mcs_peer_gmm1_m, mcs_peer_gmm2_m,mcs_peer_gmm3_m,mcs_peer_gmm4_m,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+```
+
+```{r}
+mcs_pro_gmm1_m <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+MCS_autism_long_sdq_pro_m)
+summary(mcs_pro_gmm1_m)
+
+
+mcs_pro_gmm2_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = MCS_autism_long_sdq_pro_m, mixture = ~ Sweep,
+nwg=T, B = mcs_pro_gmm1_m)
+summary(mcs_pro_gmm2_m)
+
+
+
+mcs_pro_gmm3_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = MCS_autism_long_sdq_pro_m, mixture = ~ Sweep,
+nwg=T, B = mcs_pro_gmm1_m)
+summary(mcs_pro_gmm3_m)
+
+mcs_pro_gmm4_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = MCS_autism_long_sdq_pro_m, mixture = ~ Sweep,
+nwg=T, B = mcs_pro_gmm1_m)
+summary(mcs_pro_gmm4_m)
+mcs_pro_gmm5_m <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 5, data = MCS_autism_long_sdq_pro_m, mixture = ~ Sweep,
+nwg=T, B = mcs_pro_gmm1_m)
+summary(mcs_pro_gmm5_m)
+# make a table with results for the 3 models:
+fit_ind_m <- summarytable(mcs_pro_gmm1_m, mcs_pro_gmm2_m,mcs_pro_gmm3_m,mcs_pro_gmm4_m,mcs_pro_gmm5_m,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+```

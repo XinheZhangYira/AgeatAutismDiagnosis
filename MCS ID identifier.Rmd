@@ -1,0 +1,183 @@
+---
+title: "MCS ID Identifier"
+author: "Yira Zhang"
+date: "2023-02-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Raw data
+```{r}
+library(readr)
+library(tidyverse)
+library(dplyr)
+library(corrplot)
+```
+
+```{r}
+mcs2_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_cm_cognitive_assessment.tab")
+mcs3_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5795-tab/tab/mcs3_cm_cognitive_assessment.tab")
+mcs4_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-6411-tab/tab/mcs4_cm_cognitive_assessment.tab")
+mcs5_cog <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-7464-tab/tab/mcs5_cm_cognitive_assessment.tab")
+mcs_imp <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/sftimp_data.csv")
+mcs_imp <- mcs_imp[-1]
+names(mcs_imp)[1] <- "CMID"
+```
+
+```{r}
+mcs_cog_consistent_ID <- unique(mcs5_cog$MCSID[mcs5_cog$MCSID %in% mcs4_cog$MCSID[mcs4_cog$MCSID %in% mcs3_cog$MCSID[mcs3_cog$MCSID %in% mcs2_cog$MCSID]]])
+mcs2_cons_cog <- as.data.frame(mcs2_cog %>% filter(MCSID %in% mcs_cog_consistent_ID))
+mcs3_cons_cog <- as.data.frame(mcs3_cog %>% filter(MCSID %in% mcs_cog_consistent_ID)) 
+mcs4_cons_cog <- as.data.frame(mcs4_cog %>% filter(MCSID %in% mcs_cog_consistent_ID))
+mcs5_cons_cog <- as.data.frame(mcs5_cog %>% filter(MCSID %in% mcs_cog_consistent_ID))
+```
+
+```{r}
+mcs2_cog_sum <- dplyr::select(mcs2_cons_cog, MCSID,BCNUM00,BDSRCS00,BDSRCP00,BDSRCN00,BDBASR00,BDBASA00,BDBASP00,BDBAST00)
+mcs2_cog_sum$CMID <- paste(mcs2_cog_sum$MCSID, mcs2_cog_sum$BCNUM00, sep ="")
+mcs3_cog_sum <- dplyr::select(mcs3_cons_cog, MCSID,CCNUM00, CCNSCO00,CCNVABIL,CCNVTSCORE,CCCSCO00,CCPCABIL,CCPCTSCORE,CCCPAS00,CCCERR00,CCPSCO00,CCPSABIL,CCPSTSCORE)
+mcs3_cog_sum$CMID <- paste(mcs3_cog_sum$MCSID, mcs3_cog_sum$CCNUM00, sep = "")
+mcs4_cog_sum <- dplyr::select(mcs4_cons_cog, MCSID,DCNUM00,DCTOTS00,DCPCAB00,DCPCTS00,DCWRAB00,DCWRSD00,DCMATHS7SC,DCMATHS7SA)
+mcs4_cog_sum$CMID <- paste(mcs4_cog_sum$MCSID, mcs4_cog_sum$DCNUM00, sep = "")
+mcs5_cog_sum <- dplyr::select(mcs5_cons_cog, MCSID,ECNUM00,ECDTOT00)
+mcs5_cog_sum$CMID <- paste(mcs5_cog_sum$MCSID, mcs5_cog_sum$ECNUM00, sep = "")
+
+df_list <- list(mcs2_cog_sum, mcs3_cog_sum, mcs4_cog_sum, mcs5_cog_sum)
+mcs_2_5_cog_sum <- df_list %>% reduce(full_join, by= c('CMID','MCSID'))
+
+```
+
+```{r}
+mcs_cog_pca <- dplyr::select(mcs_2_5_cog_sum, CMID,BDSRCS00, BDBASA00, CCNVABIL, CCPCABIL, CCPSABIL, DCPCAB00, DCWRAB00, DCMATHS7SA,ECDTOT00)
+
+mcs_cog_pca <- mcs_cog_pca %>% 
+  mutate_at(vars(CCPCABIL,ECDTOT00), as.numeric) %>% mutate(across(everything(), function(x){replace(x, which(x<0), NA)})) %>% na.omit
+imp_cog <- mcs_imp[, names(mcs_imp) %in% names(mcs_cog_pca)]
+mcs_imp_cog <- rbind(mcs_cog_pca, imp_cog) %>% unique()
+mcs_cog_pca_complete <- mcs_cog_pca[,2:10]
+
+mcs_cog_pca_complete_imp <- mcs_imp_cog[,2:10]
+```
+
+```{r}
+cor(mcs_cog_pca_complete, use = "complete.obs")
+corrplot3 <- corrplot.mixed(cor(mcs_cog_pca_complete, use = "complete.obs"), upper = 'circle', 
+                            lower = "number",
+                            tl.pos = "lt", 
+                            tl.col = "black",
+                            tl.cex = 0.8,
+                            addCoefasPercent = TRUE,
+                            number.cex=0.8)
+cor(mcs_cog_pca_complete_imp, use = "complete.obs")
+corrplot_imp <- corrplot.mixed(cor(mcs_cog_pca_complete_imp, use = "complete.obs"), upper = 'circle', 
+                            lower = "number",
+                            tl.pos = "lt", 
+                            tl.col = "black",
+                            tl.cex = 0.8,
+                            addCoefasPercent = TRUE,
+                            number.cex=0.8)
+```
+
+```{r}
+
+pc <- prcomp(mcs_cog_pca_complete, center = TRUE, scale = TRUE)
+summary_pc <- summary(pc)
+mcs_iq_pca_summary <- as.data.frame(summary_pc$importance)
+# view(pc$rotation) # PC1 proportion of variance: 0.403960
+cog_pc_score <- as.data.frame(summary_pc$x)
+mcs_cog_pca_score <- cbind(mcs_cog_pca$MCSID,mcs_cog_pca$BCNUM00, mcs_cog_pca$CMID, cog_pc_score)
+
+pc_imp <- prcomp(mcs_cog_pca_complete_imp, center = TRUE, scale = TRUE)
+summary_pc_imp <- summary(pc_imp)
+mcs_iq_pca_summary_imp <- as.data.frame(summary_pc_imp$importance)
+
+cog_pc_score_imp <- as.data.frame(summary_pc_imp$x)
+mcs_cog_pca_score_imp <- cbind(mcs_imp_cog$CMID, cog_pc_score_imp)
+names(mcs_cog_pca_score_imp)[1]<- "cmid"
+imp_IQ <- mcs_cog_pca_score_imp[,1:2]
+imp_asd_IQ <- imp_IQ[imp_IQ$cmid %in% mcs_imp$CMID, ] %>% unique()
+names(imp_asd_IQ)[2] <- "IQ"
+```
+
+## Label ID
+```{r}
+# Label anyone with a PC1 score 2 or more standar deviation lower than the mean of PC1 score as ID.
+pc1_mean <- mean(mcs_cog_pca_score$PC1)
+mcs_cog_pca_score$ID <- ifelse(pc1_mean - mcs_cog_pca_score$PC1 >= 2* pca_summary[1,1],"1","0")
+# 113 were identified is ID, the prevalence rate is 0.01220302
+
+PC1_mean_imp <- mean(mcs_cog_pca_score_imp$PC1)
+mcs_cog_pca_score_imp$ID <- ifelse(PC1_mean_imp - mcs_cog_pca_score_imp$PC1 >= 2* mcs_iq_pca_summary_imp[1,1],"1","0")
+table(mcs_cog_pca_score_imp$ID) # prevalence rate dropped to 0.004654457 or 0/008094708 when using old summary
+```
+
+# Generate dataframe
+```{r}
+mcs_ID_identifier <- as.data.frame(mcs_cog_pca_score[,c(1:4,13)])
+write.csv(mcs_ID_identifier, file = "/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ID_identifier.csv")
+
+
+```
+
+
+# Cognitive ability 
+# Sweep 2 (age 3)
+# the Bracken School Readiness Assessment-Revised (Bracken, 1998) (conceptual knowledge) (BSRA-R) 
+BDSRCS00 # school readiness composit standard score
+BDSRCP00 # percentile
+BDSRCN00 # normative classification
+
+# the BAS-II Naming Vocabulary test (Elliott et al., 1997) (expressive language ability)  
+BDBASR00 # raw score
+BDBASA00 # ability score 2
+BDBASP00 # Percentile
+BDBAST00 # T-score
+
+# Sweep 3 (age 5)
+# BAS Naming Vocabulary
+CCNSCO00 # total score
+CCNVABIL # ability score
+CCNVTSCORE # T-score
+
+# BAS Pattern Construction (spatial problem-solving ability)
+CCCSCO00 # Total score
+CCPCABIL # ability score
+CCPCTSCORE # T-score
+CCCPAS00 # number of correct responses
+CCCERR00 # number of incorrect responses
+
+# BAS Picture Similarities (non-verbal reasoning)  
+CCPSCO00 # total raw score
+CCPSABIL # ability score
+CCPSTSCORE # T-score
+
+
+# Sweep 4 (age 7)
+# pattern construction 
+DCTOTS00 # raw score
+DCPCAB00 # ability score
+DCPCTS00 # age-based T-scores
+
+#word reading scores from the BAS-II
+DCWRAB00 # ability score
+DCWRSD00 # standard score
+
+# a shortened version of the Progress in Maths tests (Connelly, 2013) (National Foundation for education Research). 
+DCMATHS7SC # raw score scaled to original test out of 28 marks
+DCMATHS7SA # age standardised score
+
+# Sweep 5 (age 11)
+# the BAS Verbal Similarities (verbal knowledge and reasoning capability) 
+ECDTOT00 # total correct responses
+
+
+# the error scores on the spatial working memory (SWM) task (representative of executive functioning (Atkinson, 2015)) from the Cambridge Neuropsychological Test Automated Battery (Robbins et al., 1994) (CANTAB)
+# no available data
+
+# Sweep 6 (age 13)
+# Word activity
+FCWRDSC # score out of 20
+

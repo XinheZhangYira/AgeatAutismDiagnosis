@@ -1,0 +1,1009 @@
+---
+title: "GMM group membership regression"
+author: "Yira Zhang"
+date: "2023-02-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(data.table)
+library(tidyverse)
+library(lavaan)
+library(leaps)
+library(car)
+library(relaimpo)
+library(plyr)
+```
+## Data
+```{r}
+MCS_autism <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_autism.csv") # 188 in total
+mcs2_parent_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_interview.tab")
+mcs_ID_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ID_identifier.csv")
+mcs_ethnicity_mbirth_age <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_race_mbirthage.csv")
+mcs2_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ses_identifier.csv")
+mcs2_dep_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_deprivation_identifier.csv") 
+mcs2_family_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_family_derived.tab")
+mcs2_other_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_other_ses_identifier.csv")
+mcs_gmm_2_group <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_autism_gmm_group_membership.csv") # 1 = decreasing line; 2 = increasing line; prosocial is a bit tricky as two/three/four groups gave similar BIC, so went with 2-group solution to stay consistent with other subscales
+MCS_sdq_autism <- MCS_autism[,c(1:21,34:39,22:33,40:45)]
+MCS_sdq_autism <- subset(MCS_sdq_autism, select = -PID)
+MCS_sdq_autism$cmid <- paste(MCS_sdq_autism$MCSID, MCS_sdq_autism$CNUM, sep = "")
+
+mcs_gmm_2_group <- cbind(MCS_sdq_autism$cmid,mcs_gmm_2_group)
+names(mcs_gmm_2_group)[1] <- "cmid"
+mcs6_cm_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-8156-tab/tab/mcs6_cm_interview.tab")
+mcs6_cm_interview$cmid <- paste(mcs6_cm_interview$MCSID, mcs6_cm_interview$FCNUM00, sep = "")
+mcs6_smfq <- mcs6_cm_interview %>% filter(cmid %in% MCS_sdq_autism$cmid) %>% dplyr::select(MCSID,cmid, FCMDSA00,FCMDSB00,FCMDSC00,FCMDSD00,FCMDSE00,FCMDSF00,FCMDSG00,FCMDSH00,FCMDSI00,FCMDSJ00,FCMDSK00,FCMDSL00,FCMDSM00)
+mcs6_smfq[mcs6_smfq < 0] <- NA
+mcs6_smfq[, 3:ncol(mcs6_smfq)] <- mcs6_smfq[, 3:ncol(mcs6_smfq)] - 1
+mcs_asd_smfq <- merge(mcs_gmm_2_group, mcs6_smfq, by = c("MCSID","cmid"), all = T)
+mcs_asd_smfq$smfq_ttl <- rowSums(mcs_asd_smfq[,13:25])
+```
+
+
+```{r}
+smfh_ratio <- mcs_asd_mh[!is.na(mcs_asd_smfq$smfq_ttl), ] %>% 
+  group_by(ttl, Sex)%>%
+  dplyr::summarize(count = n())
+
+smfh_ratio
+
+
+summary_smfq <-mcs_asd_smfq %>%
+  dplyr::group_by(ttl,Sex) %>%
+  dplyr::summarize(
+    smfq_Median = median(smfq_ttl, na.rm = TRUE),
+    smfq_Q1 = quantile(smfq_ttl, probs = 0.25, na.rm = TRUE),
+    smfq_Q3 = quantile(smfq_ttl, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_smfq)
+
+summary_smfq_sex <-mcs_asd_smfq %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::summarize(
+    smfq_Median = median(smfq_ttl, na.rm = TRUE),
+    smfq_Q1 = quantile(smfq_ttl, probs = 0.25, na.rm = TRUE),
+    smfq_Q3 = quantile(smfq_ttl, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_smfq_sex)
+
+summary_smfq_grp <-mcs_asd_smfq %>% group_by(ttl) %>%
+  dplyr::summarize(
+    smfq_Median = median(smfq_ttl, na.rm = TRUE),
+    smfq_Q1 = quantile(smfq_ttl, probs = 0.25, na.rm = TRUE),
+    smfq_Q3 = quantile(smfq_ttl, probs = 0.75, na.rm = TRUE)
+  )  
+print(summary_smfq_grp)
+
+summary_smfq_ova <-mcs_asd_smfq %>%
+  dplyr::summarize(
+    smfq_Median = median(smfq_ttl, na.rm = TRUE),
+    smfq_Q1 = quantile(smfq_ttl, probs = 0.25, na.rm = TRUE),
+    smfq_Q3 = quantile(smfq_ttl, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_smfq_ova)
+
+mcs_smfq_model_poisson <- glm(smfq_ttl ~ ttl + Sex, family = poisson, data = mcs_asd_smfq)
+mcs_smfq_model_poissonsum <- broom::tidy(mcs_smfq_model_poisson)
+mcs_smfq_model_poisson_int <- glm(smfq_ttl ~ ttl + Sex + ttl:Sex, family = poisson, data = mcs_asd_smfq)
+mcs_smfq_model_poisson_intsum <- broom::tidy(mcs_smfq_model_poisson_int)
+mcs_smfq_mode_sum <- rbind(mcs_smfq_model_poissonsum,mcs_smfq_model_poisson_intsum)
+mcs_smfq_mode_sum
+```
+```{r}
+# Perform Mann-Whitney U test
+smfq.diff <- wilcox.test(smfq_ttl ~ ttl, data = mcs_asd_smfq)
+smfq.diff
+
+smfq.diff.sex <- wilcox.test(smfq_ttl ~ Sex, data = mcs_asd_smfq)
+smfq.diff.sex
+
+smfq.diff.sex.1 <- wilcox.test(smfq_ttl ~ Sex, data = mcs_asd_smfq[mcs_asd_smfq$ttl == 1,])
+smfq.diff.sex.1
+
+smfq.diff.sex.2 <- wilcox.test(smfq_ttl ~ Sex, data = mcs_asd_smfq[mcs_asd_smfq$ttl == 2,])
+smfq.diff.sex.2
+
+smfq.diff.male <- wilcox.test(smfq_ttl ~ ttl, data = mcs_asd_smfq[mcs_asd_smfq$Sex == 1,])
+smfq.diff.male
+smfq.diff.female <- wilcox.test(smfq_ttl ~ ttl, data = mcs_asd_smfq[mcs_asd_smfq$Sex == 2,])
+smfq.diff.female
+```
+
+
+```{r}
+mcs7_cm_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-8682-tab/tab/mcs7_cm_interview.tab")
+mcs7_cm_interview$cmid <- paste(mcs7_cm_interview$MCSID, mcs7_cm_interview$GCNUM00, sep = "")
+mcs7_mh_condition<- mcs7_cm_interview %>% filter(cmid %in% MCS_sdq_autism$cmid) %>% dplyr::select(MCSID, cmid,GCDEAN00,GCCLSM0G,GCCLSM0O,GCPHDE00,GCPHHO00,GCPHRF00,GCPHEE00,GCPHWO00,GCPHNE00,GCSHCU00,GCSHBU00,GCSHBR00,GCSHOD00,GCSHPU00,GCSHRM00,GCSHRZ0A,
+GCSHRZ0B,GCSHRZ0C,GCSHRZ0D,GCSHRZ0E,GCSHRZ0F,GCSHRZ0N,GCSHRZ0O,GCSUIC00)
+
+mcs7_mh_condition$GCDEAN00[mcs7_mh_condition$GCDEAN00 %in% c(3,4,5)] <- NA
+mcs7_mh_condition$GCDEAN00 <- ifelse(mcs7_mh_condition$GCDEAN00 == 2,0,1)
+mcs7_mh_condition <- mcs7_mh_condition %>% dplyr::mutate_at(vars(c("GCCLSM0G","GCCLSM0O")), ~ ifelse(. == -1, NA, .)) %>% dplyr::mutate_at(vars(c("GCPHDE00","GCPHHO00","GCPHRF00","GCPHEE00","GCPHWO00","GCPHNE00")), ~ ifelse(. %in% c(6,7,8), NA, .)) %>% dplyr::mutate_at(vars(c("GCSHCU00","GCSHBU00","GCSHBR00","GCSHOD00","GCSHPU00","GCSHRM00")), ~ifelse(. %in% c(3,4,5),NA,.)) %>% mutate_at(vars(c("GCSHRZ0A","GCSHRZ0B","GCSHRZ0C","GCSHRZ0D","GCSHRZ0E","GCSHRZ0F","GCSHRZ0N","GCSHRZ0O")), ~ ifelse(. == -1, NA, .)) %>% dplyr::mutate_at(vars("GCSUIC00"), ~ ifelse(. %in% c(3,4,5),NA,.))
+```
+
+```{r}
+sex_ratio_diag_age <- mcs_gmm_2_group %>%
+  group_by(diag.age, Sex) %>%
+  dplyr::summarize(count = n())
+sex_ratio_diag_age
+```
+
+```{r}
+mcs_asd_mh <- merge(mcs_gmm_2_group, mcs7_mh_condition, by = c("MCSID","cmid"), all = T)
+
+mcs_asd_mh$mh <- ifelse(mcs_asd_mh$GCDEAN00 == 1|mcs_asd_mh$GCCLSM0G == 1, 1, 0)
+kessler <- c("GCPHDE00","GCPHHO00","GCPHRF00","GCPHEE00","GCPHWO00","GCPHNE00")
+
+# recode Kessler 6 to have higher values indicating more severe problems
+mcs_asd_mh <- mcs_asd_mh %>% mutate_at(all_of(kessler), ~ 6 - .)
+
+# Recode for suicidal ideation: 1 = Yes, 0 = No
+mcs_asd_mh$GCSUIC00 <- ifelse(mcs_asd_mh$GCSUIC00 == 2,0,mcs_asd_mh$GCSUIC00)
+
+# Recode for some self-harm behaviours: 1 = Yes, 0 = No
+mcs_asd_mh <- mcs_asd_mh %>% mutate_at(vars("GCSHCU00","GCSHBU00","GCSHBR00","GCSHOD00","GCSHPU00","GCSHRM00"), ~ifelse(. == 2, 0,.))
+# have a total score for Kessler
+mcs_asd_mh <- mcs_asd_mh %>% mutate(KS = GCPHDE00+GCPHHO00+GCPHRF00+GCPHEE00+GCPHWO00+GCPHNE00)
+
+# have a total score for self-harm 
+col_range <- which(names(mcs_asd_mh) %in% c("GCSHCU00","GCSHBU00","GCSHBR00","GCSHOD00","GCSHPU00","GCSHRM00","GCSHRZ0A","GCSHRZ0B","GCSHRZ0C","GCSHRZ0D","GCSHRZ0E","GCSHRZ0F","GCSHRZ0N","GCSHRZ0O"))
+
+# Filter rows based on the presence of at least one non-NA value in the column range
+mcs_asd_mh_sh <- mcs_asd_mh[rowSums(!is.na(mcs_asd_mh[, col_range])) > 0, ]
+
+
+mcs_asd_mh_sh <- mcs_asd_mh_sh %>% mutate(self_harm = GCSHCU00+GCSHBU00+GCSHBR00+GCSHOD00+GCSHPU00+GCSHRM00+GCSHRZ0A+GCSHRZ0B+GCSHRZ0C+GCSHRZ0D+GCSHRZ0E+GCSHRZ0F+GCSHRZ0N+GCSHRZ0O)
+
+mh_ratio_ttl_grp <- mcs_asd_mh %>% group_by(ttl, mh, Sex)%>%
+  dplyr::summarize(count = n())
+mh_ratio_ttl_grp
+
+sui_ratio_ttl_grp <- mcs_asd_mh %>% group_by(ttl,GCSUIC00 , Sex)%>%
+  dplyr::summarize(count = n())
+sui_ratio_ttl_grp
+```
+
+# Kessler 6
+
+```{r}
+mh_ratio_KS <- mcs_asd_mh[!is.na(mcs_asd_mh$KS), ] %>% 
+  group_by(ttl, Sex)%>%
+  dplyr::summarize(count = n())
+mh_ratio_KS
+
+
+mcs_asd_mh$KS <- as.integer(mcs_asd_mh$KS)
+# Calculate summary statistics by group and for total sample
+summary_KS <-mcs_asd_mh %>%
+  dplyr::group_by(ttl,Sex) %>%
+  dplyr::summarize(
+    KS_Median = median(KS, na.rm = TRUE),
+    KS_Q1 = quantile(KS, probs = 0.25, na.rm = TRUE),
+    KS_Q3 = quantile(KS, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_KS)
+
+summary_KS_sex <-mcs_asd_mh %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::summarize(
+    KS_Median = median(KS, na.rm = TRUE),
+    KS_Q1 = quantile(KS, probs = 0.25, na.rm = TRUE),
+    KS_Q3 = quantile(KS, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_KS_sex)
+
+```
+```{r}
+# Perform Mann-Whitney U test
+ks.diff <- wilcox.test(KS ~ ttl, data = mcs_asd_mh)
+ks.diff
+
+ks.diff.sex <- wilcox.test(KS ~ Sex, data = mcs_asd_mh)
+ks.diff.sex
+
+ks.diff.sex.1 <- wilcox.test(KS ~ Sex, data = mcs_asd_mh[mcs_asd_mh$ttl == 1,])
+ks.diff.sex.1
+
+ks.diff.sex.2 <- wilcox.test(KS ~ Sex, data = mcs_asd_mh[mcs_asd_mh$ttl == 2,])
+ks.diff.sex.2
+
+ks.diff.male <- wilcox.test(KS ~ ttl, data = mcs_asd_mh[mcs_asd_mh$Sex == 1,])
+ks.diff.male
+ks.diff.female <- wilcox.test(KS ~ ttl, data = mcs_asd_mh[mcs_asd_mh$Sex == 2,])
+ks.diff.female
+```
+
+
+# Self-Harm
+```{r}
+mh_ratio_sh <- mcs_asd_mh_sh %>% 
+  group_by(ttl, Sex)%>%
+  dplyr::summarize(count = n())
+mh_ratio_sh
+mcs_asd_mh_sh$self_harm <- as.integer(mcs_asd_mh_sh$self_harm)
+# Calculate summary statistics by group and for total sample
+summary_self_harm <-mcs_asd_mh_sh %>%
+  dplyr::group_by(ttl,Sex) %>%
+  dplyr::summarize(
+    self_harm_Median = median(self_harm, na.rm = TRUE),
+    self_harm_Q1 = quantile(self_harm, probs = 0.25, na.rm = TRUE),
+    self_harm_Q3 = quantile(self_harm, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_self_harm)
+
+summary_self_harm_grp <-mcs_asd_mh_sh %>%
+  dplyr::group_by(ttl) %>%
+  dplyr::summarize(
+    self_harm_Median = median(self_harm, na.rm = TRUE),
+    self_harm_Q1 = quantile(self_harm, probs = 0.25, na.rm = TRUE),
+    self_harm_Q3 = quantile(self_harm, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_self_harm_grp)
+
+summary_self_harm_sex <-mcs_asd_mh_sh %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::summarize(
+    self_harm_Median = median(self_harm, na.rm = TRUE),
+    self_harm_Q1 = quantile(self_harm, probs = 0.25, na.rm = TRUE),
+    self_harm_Q3 = quantile(self_harm, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_self_harm_sex)
+
+
+summary_self_harm_all <-mcs_asd_mh_sh %>%
+
+  dplyr::summarize(
+    self_harm_Median = median(self_harm, na.rm = TRUE),
+    self_harm_Q1 = quantile(self_harm, probs = 0.25, na.rm = TRUE),
+    self_harm_Q3 = quantile(self_harm, probs = 0.75, na.rm = TRUE)
+  )  
+# Display the summary statistics table
+print(summary_self_harm_all)
+
+```
+```{r}
+# Perform Mann-Whitney U test
+self_harm.diff <- wilcox.test(self_harm ~ ttl, data = mcs_asd_mh_sh)
+self_harm.diff
+
+self_harm.diff.sex <- wilcox.test(self_harm ~ Sex, data = mcs_asd_mh_sh)
+self_harm.diff.sex
+
+self_harm.diff.sex.1 <- wilcox.test(self_harm ~ Sex, data = mcs_asd_mh_sh[mcs_asd_mh_sh$ttl == 1,])
+self_harm.diff.sex.1
+
+self_harm.diff.sex.2 <- wilcox.test(self_harm ~ Sex, data = mcs_asd_mh_sh[mcs_asd_mh_sh$ttl == 2,])
+self_harm.diff.sex.2
+
+self_harm.diff.male <- wilcox.test(self_harm ~ ttl, data = mcs_asd_mh_sh[mcs_asd_mh_sh$Sex == 1,])
+self_harm.diff.male
+self_harm.diff.female <- wilcox.test(self_harm ~ ttl, data = mcs_asd_mh_sh[mcs_asd_mh_sh$Sex == 2,])
+self_harm.diff.female
+```
+
+
+```{r}
+
+mcs_self_harm_mod <- glm(self_harm ~ ttl + Sex, data = mcs_asd_mh_sh, family = poisson)
+mcs_self_harm_modsum <- broom::tidy(mcs_self_harm_mod)
+mcs_self_harm_mod_int <- glm(self_harm ~ ttl + Sex + ttl:Sex, data = mcs_asd_mh_sh, family = poisson)
+mcs_self_harm_mod_intsum <- broom::tidy(mcs_self_harm_mod_int)
+mcs_self_harm_sum <- rbind(mcs_self_harm_modsum, mcs_self_harm_mod_intsum)
+mcs_self_harm_sum
+```
+
+
+
+
+
+```{r}
+
+sex_ratio_diag_age <- sex_ratio_diag_age %>%
+  mutate(percentage = count / sum(count) * 100)
+sex_ratio_diag_age$diag.age <- as.factor(sex_ratio_diag_age$diag.age)
+sex_ratio_diag_age$Sex <- as.factor(sex_ratio_diag_age$Sex)
+# Create the stacked bar chart using ggplot2
+ggplot(sex_ratio_diag_age, aes(x = diag.age, y = percentage, fill = Sex)) +
+  geom_col(position = "stack") +
+  labs(title = "Diagnosed Autism by Age Group and Sex",
+       x = "diagnosis age",
+       y = "percentage",
+       fill = "Sex") +
+ scale_fill_manual(values = c("1" = "blue", "2" = "pink"), 
+                    labels = c("Male", "Female"),
+                    guide = guide_legend(title = "Sex")) 
+```
+
+
+
+
+
+```{r}
+mcs_autism_IQ <- mcs_ID_identifier[mcs_ID_identifier$mcs_cog_pca.MCSID %in% MCS_sdq_autism$MCSID, ]
+mcs_autism_IQ <- mcs_autism_IQ[,2:6]
+colnames(mcs_autism_IQ) <- c("MCSID","CNUM00","CMID","PC1","ID")
+mcs1_ethnicity <- mcs_ethnicity_mbirth_age[,2:6]
+mcs1_birth_age <- mcs_ethnicity_mbirth_age[,c(2,7,8)]
+mcs_autism_eth <- mcs1_ethnicity[mcs1_ethnicity$MCSID %in% MCS_sdq_autism$MCSID, ]
+mcs_autism_mbirthage <- mcs1_birth_age[mcs1_birth_age$MCSID %in% MCS_sdq_autism$MCSID, ]
+
+mcs_autism_other_ses <- mcs2_other_ses_identifier[mcs2_other_ses_identifier$MCSID %in% MCS_sdq_autism$MCSID,]
+mcs_autism_other_ses <- mcs_autism_other_ses[,c(2:6,8)]
+
+mcs_autism_dep <- mcs2_dep_identifier[mcs2_dep_identifier$MCSID %in% MCS_sdq_autism$MCSID, ]
+mcs_autism_dep <- mcs_autism_dep[,1:8]
+
+all_tip_list = list(mcs_autism_IQ, mcs_autism_eth, mcs_autism_mbirthage, mcs_autism_other_ses, mcs_autism_dep)
+mcs_autism_all_tip <- all_tip_list %>% reduce(inner_join, by = "MCSID")  
+mcs_autism_all_tip <- mcs_autism_all_tip[!duplicated(mcs_autism_all_tip$CMID), ]
+# n =125, f:M = 35:90
+
+```
+
+```{r}
+mcs_autism_all_tip_gmm <- inner_join(mcs_autism_all_tip, mcs_gmm_2_group, by = "MCSID")
+mcs_autism_all_tip_gmm <- mcs_autism_all_tip_gmm[,c(1:3,28,27,4,7:23,29:34)]
+colnames(mcs_autism_all_tip_gmm) <- c("MCSID","CNUM00","CMID","Sex","diag.age" ,"IQ","Eth","Eth_11","Eth_8","MBA"   ,"mBirthdage_grp","IncomeQuant","LabourMrtSts","OECDPov","HouseTen","SES","ccountry","dep_Overall", "dep_Income","dep_Employment","dep_HealthDisability","dep_EduSkillTrain","dep","ttl","emo","con","hyp","peer","pro")
+
+```
+
+```{r}
+mcs_autism_all_tip_gmm$group <- ifelse(mcs_autism_all_tip_gmm$diag.age <= 11, "early", "late")
+variables_of_interest <- c("IQ", "MBA","SES","dep")
+group_variable <- "group"
+
+for (var in variables_of_interest) {
+  mwu_result <- wilcox.test(mcs_autism_all_tip_gmm[[var]] ~ mcs_autism_all_tip_gmm[[group_variable]])
+  print(paste("Mann-Whitney U Test for", var))
+  print(mwu_result)
+}
+
+categorical_variables <- c("Eth", "ccountry")
+group_variable <- "group"
+
+for (var in categorical_variables) {
+  chisq_result <- chisq.test(table(mcs_autism_all_tip_gmm[[var]], mcs_autism_all_tip_gmm[[group_variable]]))
+  print(paste("Chi-Square Test for", var))
+  print(chisq_result)
+}
+
+for (var in categorical_variables) {
+  fisher_result <- fisher.test(table(mcs_autism_all_tip_gmm[[var]], mcs_autism_all_tip_gmm[[group_variable]]))
+  print(paste("Fisher Test for", var))
+  print(fisher_result)
+  
+}
+
+```
+
+# Regression
+```{r}
+mcs_autism_all_tip_gmm$eth <- ifelse(mcs_autism_all_tip_gmm$Eth == 1, 0,1)
+fit_all <- lm(diag.age ~ Sex + IQ + eth + MBA + SES + dep + ttl + emo + con + hyp + peer + pro, data= mcs_autism_all_tip_gmm)
+summary(fit_all)
+tab_model(fit_all)
+```
+
+# Mental health
+```{r}
+mcs_mh_mod <- glm(mh~ ttl + Sex, data = mcs_asd_mh, family = binomial)
+mcs_anx_modsum <- broom::tidy(mcs_mh_mod)
+mcs_mh_mod_int <- glm(mh~ ttl + Sex + ttl:Sex, data = mcs_asd_mh, family = binomial)
+mcs_mh_mod_intsum <- broom::tidy(mcs_mh_mod_int)
+
+mcs_mh_sum <- rbind(mcs_anx_modsum,mcs_mh_mod_intsum)
+mcs_mh_sum
+
+
+fit_mh <- lm(mh ~  Sex + ttl+emo+con+hyp + peer + pro + diag.age, data= mcs_asd_mh)
+summary(fit_mh)
+tab_model(fit_mh)
+
+fit_ks <- lm(KS ~  Sex + ttl+emo+con+hyp + peer + pro + diag.age, data= mcs_asd_mh)
+summary(fit_ks)
+
+fit_sui <- lm(GCSUIC00 ~  Sex + ttl+emo+con+hyp + peer + pro + diag.age, data= mcs_asd_mh)
+summary(fit_sui)
+
+tab_model(fit_sui)
+
+mcs_sui_mod <- glm(GCSUIC00~ ttl + Sex, data = mcs_asd_mh, family = binomial)
+mcs_sui_modsum <- broom::tidy(mcs_sui_mod)
+mcs_sui_mod_int <- glm(GCSUIC00~ ttl + Sex + ttl:Sex, data = mcs_asd_mh, family = binomial)
+mcs_sui_mod_intsum <- broom::tidy(mcs_sui_mod_int)
+
+mcs_sui_sum <- rbind(mcs_sui_modsum,mcs_sui_mod_intsum)
+mcs_sui_sum
+```
+
+
+```{r}
+residuals_fit_all <- residuals(fit_all)
+qqnorm(residuals_fit_all)
+qqline(residuals_fit_all)
+shapiro.test(residuals_fit_all)
+hist(residuals_fit_all)
+```
+
+
+```{r}
+leaps <- regsubsets(diag.age ~ Sex + IQ + Eth + MBA + SES + dep + ttl + emo + con + hyp + peer + pro, data= mcs_autism_all_tip_gmm, nbest = 10)
+# view results
+summary(leaps)
+# plot a table of models showing variables in each model.
+# models are ordered by the selection statistic.
+plot(leaps,scale="r2")
+
+```
+
+```{r}
+# Calculate Relative Importance for Each Predictor
+
+calc.relimp(fit_all,type=c("lmg","last","first","pratt"),
+   rela=TRUE)
+
+# Bootstrap Measures of Relative Importance (100 samples)
+boot_lmg <- boot.relimp(fit_all, b = 100, type = "lmg", rank = TRUE,
+  diff = TRUE, rela = TRUE)
+boot_last <- boot.relimp(fit_all, b = 100, type = "last", rank = TRUE, 
+  diff = TRUE, rela = TRUE)
+boot_first <- boot.relimp(fit_all, b = 100, type = "first", rank = TRUE, 
+  diff = TRUE, rela = TRUE)
+boot_pratt <- boot.relimp(fit_all, b = 100, type = "pratt", rank = TRUE, 
+  diff = TRUE, rela = TRUE)
+
+booteval.relimp(boot_lmg) 
+booteval.relimp(boot_first)
+booteval.relimp(boot_last)
+booteval.relimp(boot_pratt)
+
+```
+```{r}
+par(mar = c(8,8,4,2))
+lmg <- plot(booteval.relimp(boot_lmg,sort=TRUE), level = 0.9) # lmg is the R-squared contribution averaged over orderings of regressors
+first <- plot(booteval.relimp(boot_first,sort=TRUE), level = 0.9) # first is each variables contribution when included first,  which is just the squared covariance between y and the variable.
+last <- plot(booteval.relimp(boot_last,sort=TRUE), level = 0.9) # last is each variables when included last, also sometimes called usefulness.
+pratt <- plot(booteval.relimp(boot_pratt,sort=TRUE), level = 0.9) # pratt is the product of the standardized coefficient and the correlation.
+
+
+```
+
+
+```{r}
+boot <- boot.relimp(fit_all, b = 100, type = c("lmg",
+  "last", "first", "pratt"), rank = TRUE,
+  diff = TRUE, rela = TRUE)
+booteval.relimp(boot) # print result
+png("relative_importance_plot.png", width = 800, height = 600)
+
+plot(booteval.relimp(boot,sort=TRUE)) # plot result
+```
+
+```{r}
+png("relative_importance_plot.png", width = 800, height = 600)
+
+plot(booteval.relimp(boot,sort=TRUE)) # plot result
+dev.off()
+```
+
+```{r}
+
+# Install and load the required package
+
+library(xtable)
+
+# Create a data frame for the coefficients
+coefficients <- data.frame(
+  Coefficient = c("(Intercept)", "Sex", "IQ", "Eth", "MBA", "SES", "dep", "ttl", "emo", "con", "hyp", "peer", "pro"),
+  Estimate = c(7.24031, 0.25126, 0.01046, 0.11880, 0.03743, -0.29973, 0.22262, 3.28105, -0.69494, 0.46802, -1.04452, 0.10143, -0.59548),
+  `Std. Error` = c(2.38002, 0.54723, 0.12646, 0.41211, 0.05081, 0.17922, 0.14437, 0.62838, 0.56288, 0.65685, 0.63175, 0.56374, 0.52532),
+  `t value` = c(3.042, 0.459, 0.083, 0.288, 0.737, -1.672, 1.542, 5.221, -1.235, 0.713, -1.653, 0.180, -1.134),
+  `Pr(>|t|)` = c(0.00293, 0.64702, 0.93420, 0.77367, 0.46293, 0.09723, 0.12589, 8.27e-07, 0.21956, 0.47763, 0.10106, 0.85753, 0.25940)
+)
+
+# Create the LaTeX table
+latex_table <- xtable(coefficients, align = rep("c", 5+1))
+
+# Print the LaTeX code for the table
+print(latex_table, include.rownames = FALSE)
+
+```
+
+## Teacher survey 
+```{r}
+mcs_teacher_asd_SDQ <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_4_5_teacher_asd_SDQ.csv")
+```
+
+```{r}
+
+mcs_teacher_regression <- merge(dplyr::select(mcs_gmm_2_group,MCSID, Sex, diag.age, ttl, emo, con, hyp, peer, pro),dplyr::select(mcs_teacher_asd_SDQ, MCSID,CMID,t4ttl,t4emo,t4con,t4hyp,t4peer,t4pro), by = c("MCSID"), all = TRUE) %>% na.omit
+```
+
+```{r}
+fit_all_teacher4 <- lm(diag.age ~ Sex + ttl + emo+ con + hyp + peer + pro +  t4emo + t4con + t4hyp + t4peer + t4pro, data= mcs_teacher_regression)
+summary(fit_all_teacher4)
+```
+
+
+```{r}
+calc.relimp(fit_all_teacher4, type= "lmg",diff = TRUE,
+   rela=TRUE)
+
+# Bootstrap Measures of Relative Importance (1000 samples)
+boot_lmg_teacher <- boot.relimp(fit_all_teacher4,
+b = 10, type = "lmg", rank = TRUE,
+ rela = TRUE)
+
+plot(booteval.relimp(boot_lmg_teacher,sort=TRUE), level = 0.9)
+```
+
+
+```{r}
+mcs4_teacher_parent_SDQ <- merge(dplyr::select(MCS_autism,MCSID, CNUM, DDEMOTION, DDCONDUCT, DDHYPER, DDPEER, DDPROSOC, DDDEBDTOT), dplyr::select(mcs_teacher_asd_SDQ, MCSID,t4ttl,t4emo,t4con,t4hyp,t4peer,t4pro), by = "MCSID") %>% na.omit
+mcs4_teacher_parent_SDQ <- mcs4_teacher_parent_SDQ %>%
+  mutate(diff_ttl = abs(DDDEBDTOT - t4ttl),
+         diff_emo = abs(DDEMOTION - t4emo),
+         diff_con = abs(DDCONDUCT - t4con),
+         diff_hyp = abs(DDHYPER - t4hyp),
+         diff_peer = abs(DDPEER - t4peer),
+         diff_pro = abs(DDPROSOC - t4pro))
+```
+
+```{r}
+mcs_autism_all_tip_gmm_camo <- merge(dplyr::select(mcs_gmm_2_group,MCSID, Sex, diag.age, ttl, emo, con, hyp, peer, pro), dplyr::select(mcs4_teacher_parent_SDQ, MCSID,  diff_ttl,diff_emo, diff_con, diff_hyp, diff_peer, diff_pro), by = "MCSID") %>% na.omit
+
+```
+
+```{r}
+fit_gmm_camo <- lm(diag.age ~ Sex + ttl + emo + con + hyp + peer + pro +  diff_ttl + diff_emo + diff_con + diff_hyp + diff_peer + diff_pro, data= mcs_autism_all_tip_gmm_camo)
+summary(fit_gmm_camo)
+```
+
+```{r}
+calc.relimp(fit_gmm_camo,type=c("lmg","last","first","pratt"),
+   rela=TRUE)
+
+
+# Bootstrap Measures of Relative Importance (100 samples)
+boot_lmg <- boot.relimp(diag.age ~ ttl + emo + hyp +  diff_peer , data= mcs_autism_all_tip_gmm_camo, b = 100, type = c("lmg","first","last","pratt"), rank = TRUE,diff = TRUE, rela = TRUE)
+
+
+booteval.relimp(boot_lmg) 
+
+
+
+```
+```{r}
+
+plot(booteval.relimp(boot_lmg,sort=TRUE), level = 0.9)
+
+```
+
+
+## Ordinal multiple regression
+```{r}
+ord_model <- ordinal::clm(as.factor(diag.age) ~ Sex + IQ + Eth + MBA + SES + dep + ttl + emo + con + hyp + peer + pro, data = mcs_autism_all_tip_gmm)
+summary(ord_model)
+
+```
+
+##  mediation analysis
+
+```{r}
+mcs_autism_all_tip_gmm_s <- mcs_autism_all_tip_gmm %>%
+  mutate_at(c(5,6,10:29), funs(c(scale(.))))
+```
+
+
+```{r}
+
+library(lavaan)
+
+# Create the mediation model
+
+model_1 <- "
+  # direct effects
+  diag.age ~ Sex + IQ + eth + MBA + SES + dep + ttl + emo + con + hyp + peer + pro
+  "
+fit_1 <- lavaan::sem(model_1, data = mcs_autism_all_tip_gmm_s)
+fit_1.cor <- lavInspect(fit_1, "cor.all")
+fit_1.cor
+dominance.manual(fit_1.cor)
+model_gmm <- "
+ 
+  diag.age ~ ttl + emo + con + hyp + peer + pro
+  "
+model_demog <- "
+ 
+  diag.age ~ Sex + IQ + Eth + MBA + SES + dep
+  "
+#summary(fit_1, rsquare = T, standardized = T, nd = 7)
+#dominance.manual(fit_1.cor)
+
+fit_gmm <- sem(model_gmm, mcs_autism_all_tip_gmm_s)
+fit_demog <- sem(model_demog,mcs_autism_all_tip_gmm_s)
+summary(fit_gmm, rsq = T)
+gmm_cor <- lavInspect(fit_gmm, "cor.all")
+gmm_demog <- lavInspect(fit_demog, "cor.all")
+dominance.manual(gmm_cor)
+dominance.manual(gmm_demog)
+summary(fit_demog, rsq = T)
+```
+
+
+```{r}
+model_simple_2 <- "
+diag.age ~ IQ + dep + SES + MBA + Sex + Eth + ttl + emo + con + hyp + peer + pro
+ttl ~ IQ + dep + SES + MBA + Sex + Eth
+emo ~ IQ + dep + SES + MBA + Sex + Eth
+con ~ IQ + dep + SES + MBA + Sex + Eth
+hyp ~ IQ + dep + SES + MBA + Sex + Eth
+peer ~ IQ + dep + SES + MBA + Sex + Eth
+pro ~ IQ + dep + SES + MBA + Sex + Eth
+"
+#library(manymome)
+fit_simple_2 <- sem(model_simple_2, data = mcs_autism_all_tip_gmm_s)
+summary(fit_simple_2,standardized = T, rsq = T, nd = 7)
+
+
+```
+
+model_ttl <- "ttl ~ IQ + dep + SES + MBA + Sex + Eth
+"
+model_emo <- "emo ~ IQ + dep + SES + MBA + Sex + Eth
+"
+model_con <- "con ~ IQ + dep + SES + MBA + Sex + Eth
+"
+model_hyp <- "hyp ~ IQ + dep + SES + MBA + Sex + Eth
+"
+model_peer <- "peer ~ IQ + dep + SES + MBA + Sex + Eth
+"
+model_pro <- "pro ~ IQ + dep + SES + MBA + Sex + Eth
+"
+fit_ttl <- sem(model_ttl, data = mcs_autism_all_tip_gmm_s)
+fit_emo <- sem(model_emo, data = mcs_autism_all_tip_gmm_s)
+fit_con <- sem(model_con, data = mcs_autism_all_tip_gmm_s)
+fit_hyp <- sem(model_hyp, data = mcs_autism_all_tip_gmm_s)
+fit_peer <- sem(model_peer, data = mcs_autism_all_tip_gmm_s)
+fit_pro <- sem(model_pro, data = mcs_autism_all_tip_gmm_s)
+summary(fit_ttl, rsquare = T, standardized = T, nd = 7)
+summary(fit_emo, rsquare = T, standardized = T, nd = 7)
+summary(fit_con, rsquare = T, standardized = T, nd = 7)
+summary(fit_hyp, rsquare = T, standardized = T, nd = 7)
+summary(fit_peer, rsquare = T, standardized = T, nd = 7)
+summary(fit_pro, rsquare = T, standardized = T, nd = 7)
+summary(fit_simple_2, rsquare = T, standardized = T, nd = 7)
+fit_ttl.cor <- lavInspect(fit_ttl, "cor.all")
+fit_emo.cor <- lavInspect(fit_emo, "cor.all")
+fit_con.cor <- lavInspect(fit_con, "cor.all")
+fit_hyp.cor <- lavInspect(fit_hyp, "cor.all")
+fit_peer.cor <- lavInspect(fit_peer, "cor.all")
+fit_pro.cor <- lavInspect(fit_pro, "cor.all")
+fit_simple_2.cor <- lavInspect(fit_simple_2, "cor.all")
+dominance.manual(fit_ttl.cor)
+dominance.manual(fit_emo.cor)
+dominance.manual(fit_con.cor)
+dominance.manual(fit_hyp.cor)
+dominance.manual(fit_peer.cor)
+dominance.manual(fit_pro.cor)
+dominance.manual(fit_simple_2.cor)
+#indirect_prop <- indirect_proportion(x = "Sex", m = "ttl", y = "diag.age", fit = fit_simple_2)
+
+
+```{r}
+
+library(MBESS)
+
+mediation(x = mcs_autism_all_tip_gmm_s$IQ, dv = mcs_autism_all_tip_gmm_s$diag.age, mediator = mcs_autism_all_tip_gmm_s$ttl)
+
+model_demo1 <- "
+diag.age ~ ttl + IQ + Sex + MBA
+"
+fit_demo1 <- sem(model_demo1, data = mcs_autism_all_tip_gmm_s)
+summary(fit_demo1, standardized = T, rsq = T, nd = 7)
+demo_cor1 <- lavInspect(fit_demo1, what = "cor.all")
+dominance.manual(demo_cor1)
+
+```
+
+```{r}
+model_demo <- "
+emo ~ MBA + Sex + Eth
+ttl ~ MBA + Sex + Eth
+diag.age ~ ttl + emo + MBA + Sex + Eth"
+fit_demo <- sem(model_demo, data = mcs_autism_all_tip_gmm_s)
+
+parameterEstimates(fit_demo, output = "text")
+#prop_xm1y <-manymome::indirect_proportion(x = "MBA",m = "emo",y = "diag.age",fit = fit_demo)
+indirect_effect(x = "MBA",m = "ttl", y = "diag.age", fit = fit_demo)
+indirect_effect(x = "MBA",m = "emo", y = "diag.age", fit = fit_demo)
+```
+
+
+summary(fit_demo, standardized = T, rsq = T, nd = 7)
+demo_cor <- lavInspect(fit_demo, what = "cor.all")
+dominance.manual(demo_cor)
+
+model_demo_f <- "diag.age ~ ttl + IQ + Sex + MBA
+ttl ~ IQ + Sex + MBA
+IQ ~ Sex + MBA"
+fit_demo_f <- sem(model_demo_f, data = mcs_autism_all_tip_gmm_s)
+summary(fit_demo_f, standardized = T, rsq = T, nd = 7)
+demo_cor_f <- lavInspect(fit_demo_f, what = "cor.all")
+dominance.manual(demo_cor_f)
+
+as.data.frame(demo_cor1)
+as.data.frame(demo_cor)
+as.data.frame(demo_cor_f)
+```
+
+model_demo_ttl <- "ttl ~ IQ + Sex"
+fit_demo_ttl <- sem(model_demo_ttl, data = mcs_autism_all_tip_gmm_s)
+summary(fit_demo_ttl, standardized = T, rsq = T, nd = 7)
+demo_cor_ttl <- lavInspect(fit_demo_ttl, what = "cor.all")
+dominance.manual(demo_cor_ttl)
+
+```
+
+```{r}
+library(tidySEM)
+model_2 <- "
+
+  diag.age ~ s*Sex + i*IQ + e*eth + m*MBA + se*SES + de*dep + t*ttl + em*emo + co*con + h*hyp + p*peer + pr*pro
+
+  ttl ~ i1*IQ + de1*dep + se1*SES + m1*MBA + s1*Sex + e1*eth
+  emo ~ i2*IQ + de2*dep + se2*SES + m2*MBA + s2*Sex + e2*eth
+  con ~ i3*IQ + de3*dep + se3*SES + m3*MBA + s3*Sex + e3*eth
+  hyp ~ i4*IQ + de4*dep + se4*SES + m4*MBA + s4*Sex+ e4*eth
+  peer ~ i5*IQ + de5*dep + se5*SES + m5*MBA + s5*Sex+ e5*eth
+  pro ~ i6*IQ + de6*dep + se6*SES + m6*MBA + s6*Sex+ e6*eth
+  
+  
+ indirect_ttl := i1*t  +de1*t+se1*t+m1*t +s1*t+ e1*t
+ indirect_emo := i2*em  +de2*em+se2*em+m2*em +s2*em+ e2*em
+ indirect_con := i3*co  +de3*co+se3*co+m3*co +s3*co+ e3*co
+ indirect_hyp := i4*h  +de4*h+se4*h+m4*h +s4*h+ e4*h
+ indirect_peer := i5*p  +de5*p+se5*p+m5*p +s5*p+ e5*p
+ indirect_pro := i6*pr  +de6*pr+se6*pr+m6*pr +s6*pr+ e6*pr
+ 
+direct := s + i + e +m + se + de
+total_indirect := indirect_ttl + indirect_emo + indirect_con + indirect_hyp + indirect_peer + indirect_pro
+total := direct + total_indirect
+  
+"
+set.seed(060524)
+serial_mcs_fit <- lavaan::sem(model_2, data = mcs_autism_all_tip_gmm_s, se = "bootstrap",
+    missing = "fiml", bootstrap = 1000)
+serial_mcs_fit_sum <- lavaan::summary(serial_mcs_fit, standardized = TRUE, rsq = T,
+    fit = TRUE, ci = TRUE)
+serial_mcs_fit_ParEsts <- lavaan::parameterEstimates(serial_mcs_fit, boot.ci.type = "bca.simple",standardized = TRUE)
+serial_mcs_fit_sum
+serial_mcs_fit_ParEsts
+write.csv(serial_mcs_fit_ParEsts, file = "mcs_level2.csv")
+```
+calEffSizes(model=model_2, data = mcs_autism_all_tip_gmm_s,
+            lavaan.output=FALSE)
+
+fit_2 <- lavaan::sem(model_2, data = mcs_autism_all_tip_gmm_s)
+
+parameterEstimates(fit_2, output = "text")
+```
+manymome::indirect_proportion(x = "IQ", y = "diag.age", m = "emo", fit = fit_2)
+fit_2.cor <- lavCor(fit_2)
+fit_2.cov <-lavInspect(fit_2, what = "cor.all")
+
+fit_2.cor
+fit_2.cov
+dominance.manual(fit_2.cov)
+summary(fit_2,standardized =T, rsquare = TRUE, nd = 7)
+
+tidySEM::graph_sem(fit_2,  rect_width = 1.5,
+    rect_height = 1.25, spacing_x = 2, spacing_y = 3, text_size = 4.5)
+
+
+
+
+
+```{r}
+
+model_3<- "
+ diag.age ~ s*Sex + i*IQ + e*Eth + m*MBA + se*SES + de*dep + t*ttl + em*emo + co*con + h*hyp + p*peer + pr*pro
+
+  ttl ~ i1*IQ + de1*dep + se1*SES + m1*MBA + s1*Sex + e1*Eth
+  emo ~ i2*IQ + de2*dep + se2*SES + m2*MBA + s2*Sex + e2*Eth
+  con ~ i3*IQ + de3*dep + se3*SES + m3*MBA + s3*Sex + e3*Eth
+  hyp ~ i4*IQ + de4*dep + se4*SES + m4*MBA + s4*Sex+ e4*Eth
+  peer ~ i5*IQ + de5*dep + se5*SES + m5*MBA + s5*Sex+ e5*Eth
+  pro ~ i6*IQ + de6*dep + se6*SES + m6*MBA + s6*Sex+ e6*Eth
+  IQ ~ de7*dep + se7*SES + m7*MBA + s7*Sex + e7*Eth
+  
+  "
+fit_3 <- lavaan::sem(model_3, data = mcs_autism_all_tip_gmm_s, se = "bootstrap")
+summary(fit_3,standardized = TRUE, rsquare = TRUE, nd = 7)
+fit_3.cor <- lavInspect(fit_3, what = "cor.all")
+fit_3.cor
+
+dom_3 <- dominance.manual(fit_3.cor)
+```
+
+# direct effects
+   diag.age ~ Sex + IQ + Eth + MBA + SES + dep + ttl + emo + con + hyp + peer + pro
+  
+  # mediation paths
+  IQ ~ SES + MBA + dep + Sex+ Eth
+  ttl ~ IQ + dep + SES + MBA + Sex+ Eth
+  emo ~ IQ + dep + SES + MBA + Sex+ Eth
+  con ~ IQ + dep + SES + MBA + Sex+ Eth
+  hyp ~ IQ + dep + SES + MBA + Sex+ Eth
+  peer ~ IQ + dep + SES + MBA + Sex+ Eth
+  pro ~ IQ + dep + SES + MBA + Sex+ Eth
+  
+ 
+  
+
+
+
+
+```{r}
+model_4 <- "
+
+ diag.age ~ s*Sex + i*IQ + e*Eth + m*MBA + se*SES + de*dep + t*ttl + em*emo + co*con + h*hyp + p*peer + pr*pro
+
+  ttl ~ i1*IQ + de1*dep + se1*SES + m1*MBA + s1*Sex + e1*Eth
+  emo ~ i2*IQ + de2*dep + se2*SES + m2*MBA + s2*Sex + e2*Eth
+  con ~ i3*IQ + de3*dep + se3*SES + m3*MBA + s3*Sex + e3*Eth
+  hyp ~ i4*IQ + de4*dep + se4*SES + m4*MBA + s4*Sex+ e4*Eth
+  peer ~ i5*IQ + de5*dep + se5*SES + m5*MBA + s5*Sex+ e5*Eth
+  pro ~ i6*IQ + de6*dep + se6*SES + m6*MBA + s6*Sex+ e6*Eth
+  IQ ~ se7*SES + m7*MBA + s7*Sex + e7*Eth +de7*dep
+  MBA ~ se8*SES + s8*Sex + e8*Eth + de8*dep
+
+
+  
+  "
+
+fit_4 <- lavaan::sem(model_4, data = mcs_autism_all_tip_gmm_s)
+# add a layer of Ethnicity?
+
+
+
+summary(fit_4,standardized = TRUE, rsquare = TRUE, nd = 7)
+fit_4.cor <- lavInspect(fit_4, what = "cor.all")
+dom_4 <- dominance.manual(fit_4.cor)
+```
+
+```{r}
+par1 <- as.data.frame(parameterEstimates(fit_1, standardized = T))
+par1 <- par1[par1$op == "~",]
+par1_s <-abs((par1$est - mean(par1$est))/sd(par1$est))/sum(abs((par1$est - mean(par1$est))/sd(par1$est)))
+model1_perc <- as.data.frame(cbind(par1$rhs,par1_s))
+model1_perc
+
+
+```
+```{r}
+
+par2 <- as.data.frame(parameterEstimates(fit_2))
+par2 <- par2[par2$op == "~",]
+par2_baseline <- par2[par2$lhs == "diag.age",]
+par2_baseline$perc <-  abs((par2_baseline$est - mean(par2_baseline$est))/sd(par2_baseline$est))/sum(abs((par2_baseline$est - mean(par2_baseline$est))/sd(par2_baseline$est)))
+par2_baseline$perc_overall <- 0.367*par2_baseline$perc
+par2_baseline_perc <- as.data.frame(cbind(par2_baseline$rhs,par2_baseline$perc_overall))
+#  0.367: the R^2 of diag.age
+
+par2_ttl <- par2[par2$lhs == "ttl",]
+par2_ttl$perc <-  abs((par2_ttl$est - mean(par2_ttl$est))/sd(par2_ttl$est))/sum(abs((par2_ttl$est - mean(par2_ttl$est))/sd(par2_ttl$est)))
+par2_ttl$ttl_perc_overall <- 0.131248633* 0.073*par2_ttl$perc # baseline perc * percentage of ttl
+par2_ttl_perc <- as.data.frame(cbind(par2_ttl$rhs,par2_ttl$ttl_perc_overall))
+ttl_sub <- 0.131248633 * -0.073
+par2_ttl_perc[nrow(par2_ttl_perc) + 1,] = c("mediator",ttl_sub)
+colnames(par2_ttl_perc) <- c("factor","perc_ttl")
+
+  
+par2_emo <- par2[par2$lhs == "emo",]
+par2_emo$perc <-  abs((par2_emo$est - mean(par2_emo$est))/sd(par2_emo$est))/sum(abs((par2_emo$est - mean(par2_emo$est))/sd(par2_emo$est)))
+par2_emo$emo_perc_overall <- 0.038754422* 0.142*par2_emo$perc
+par2_emo_perc <- as.data.frame(cbind(par2_emo$rhs,par2_emo$emo_perc_overall))
+emo_sub <- 0.038754422* -0.142
+par2_emo_perc[nrow(par2_emo_perc) +1, ] = c("mediator",emo_sub)
+colnames(par2_emo_perc) <- c("factor","perc_emo")
+
+par2_con <- par2[par2$lhs == "con",]
+par2_con$perc <-  abs((par2_con$est - mean(par2_con$est))/sd(par2_con$est))/sum(abs((par2_con$est - mean(par2_con$est))/sd(par2_con$est)))
+par2_con$con_perc_overall <- 0.007041448* 0.052*par2_con$perc
+par2_con_perc <- as.data.frame(cbind(par2_con$rhs,par2_con$con_perc_overall))
+con_sub <- 0.007041448*-0.052
+par2_con_perc[nrow(par2_con_perc) +1, ] = c("mediator",con_sub)
+colnames(par2_con_perc) <- c("factor","perc_con")
+
+par2_hyp <- par2[par2$lhs == "hyp",]
+par2_hyp$perc <-  abs((par2_hyp$est - mean(par2_hyp$est))/sd(par2_hyp$est))/sum(abs((par2_hyp$est - mean(par2_hyp$est))/sd(par2_hyp$est)))
+par2_hyp$hyp_perc_overall <- 0.046263210* 0.027*par2_hyp$perc
+par2_hyp_perc <- as.data.frame(cbind(par2_hyp$rhs,par2_hyp$hyp_perc_overall))
+hyp_sub <- 0.046263210*-0.027
+par2_hyp_perc[nrow(par2_hyp_perc) +1, ] = c("mediator",hyp_sub)
+colnames(par2_hyp_perc) <- c("factor","perc_hyp")
+
+par2_peer <- par2[par2$lhs == "peer",]
+par2_peer$perc <-  abs((par2_peer$est - mean(par2_peer$est))/sd(par2_peer$est))/sum(abs((par2_peer$est - mean(par2_peer$est))/sd(par2_peer$est)))
+par2_peer$peer_perc_overall <- 0.004937212* 0.063*par2_peer$perc
+par2_peer_perc <- as.data.frame(cbind(par2_peer$rhs,par2_peer$peer_perc_overall))
+peer_sub <- 0.004937212*-0.063
+par2_peer_perc[nrow(par2_peer_perc) +1, ] = c("mediator",peer_sub)
+colnames(par2_peer_perc) <- c("factor","perc_peer")
+
+par2_pro <- par2[par2$lhs == "pro",]
+par2_pro$perc <-  abs((par2_pro$est - mean(par2_pro$est))/sd(par2_pro$est))/sum(abs((par2_pro$est - mean(par2_pro$est))/sd(par2_pro$est)))
+par2_pro$pro_perc_overall <- 0.034895014* 0.066*par2_pro$perc
+par2_pro_perc <- as.data.frame(cbind(par2_pro$rhs,par2_pro$pro_perc_overall))
+pro_sub <- 0.034895014* -0.066
+par2_pro_perc[nrow(par2_pro_perc) +1, ] = c("mediator",pro_sub)
+colnames(par2_pro_perc) <- c("factor","perc_pro")
+
+par2_mediation_perc <- result <- Reduce(function(x, y) merge(x, y, by = "factor"), list(par2_ttl_perc,par2_emo_perc,par2_con_perc,par2_hyp_perc,par2_peer_perc,par2_pro_perc))
+
+
+```
+
+```{r}
+fit_results_list <- list(
+  model1 = as.data.frame(parameterEstimates(fit_1)),
+  model2 = as.data.frame(parameterEstimates(fit_2)),
+  model3 = as.data.frame(parameterEstimates(fit_3)),
+  model4 = as.data.frame(parameterEstimates(fit_4))
+
+)
+fit_results_list
+```
+
+
+```{r}
+mcs_anova_12 <- anova(fit_1, fit_2)
+mcs_anova_13 <- anova(fit_1, fit_3)
+mcs_anova_14 <- anova(fit_1, fit_4)
+mcs_anova_table <- rbind(mcs_anova_12, mcs_anova_13, mcs_anova_14)
+anova(fit_2, fit_3)
+anova(fit_3, fit_4)
+mcs_strict_anova <- anova(fit_1,fit_2,fit_3,fit_4)
+```
+
+```{r}
+# obtain RMSEA for each model
+library(semTools)
+fitMeasures(fit_1, "rmsea")
+fitMeasures(fit_2, "rmsea")
+fitMeasures(fit_3, "rmsea")
+fitMeasures(fit_4, "rmsea")
+
+```
+
+```{r}
+# obtain CFI and TLI for each model
+fitMeasures(fit_1, c("cfi", "tli"))
+fitMeasures(fit_2, c("cfi", "tli"))
+fitMeasures(fit_3, c("cfi", "tli"))
+fitMeasures(fit_4, c("cfi", "tli"))
+
+
+fitMeasures(fit_1, "agfi")
+fitMeasures(fit_2, "agfi")
+fitMeasures(fit_3, "agfi")
+fitMeasures(fit_4, "agfi")
+
+```
+

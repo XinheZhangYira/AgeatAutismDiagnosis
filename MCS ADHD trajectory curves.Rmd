@@ -1,0 +1,810 @@
+---
+title: "mcs_adhd_sdq_traj"
+author: "Yira Zhang"
+date: "2023-03-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data
+# Load prepared data
+```{r}
+# Cr. Genie
+
+
+MCS_adhd <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_adhd.csv") # 89 in total
+MCS_sdq_adhd <- MCS_adhd[,c(1:21,34:39,22:33,40:45)]
+MCS_sdq_adhd$sex_num <- ifelse(MCS_sdq_adhd$Sex =="Male", 1, 0)
+MCS_autism_adhd_both <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_both.csv")
+MCS_sdq_both <- MCS_autism_adhd_both[,c(1:21,34:39,22:33,40:45)]
+MCS_no_diag <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_control.csv") # 6047 in total
+MCS_sdq_no_diag <- MCS_no_diag[,c(1:21,34:39,22:33,40:45)]
+MCS_sdq_no_diag$sex_num <- ifelse(MCS_sdq_no_diag$Sex =="Male", 1, 0)
+```
+
+## adhd
+# Reshape data to plot-ready form
+```{r}
+# Group adhd group according to their diagnosis age
+# Though some parents provided specific diagnosis age in years, to conform to analysis in other cohorts so that cross-population comparisons could be allowed in the future
+# "Early" = first reported diagnosis at w3 (age5) or w4 (age7) or w5 (age11)
+# "Late = first reported diagnosis  or w6 (age14)
+
+
+MCS_sdq_adhd_early <- MCS_sdq_adhd %>% filter (ADHD.Diagnosis.Age %in% c("at W3","at W4","at W5")) # n = 54
+MCS_sdq_adhd_early$group <- "early"
+MCS_sdq_adhd_late <- MCS_sdq_adhd %>% filter (ADHD.Diagnosis.Age %in% c("at W6")) # n = 35
+MCS_sdq_adhd_late$group <- "late"
+MCS_sdq_no_diag$group <- "no diag"
+MCS_sdq_adhd_all <- rbind(MCS_sdq_adhd_early, MCS_sdq_adhd_late, MCS_sdq_no_diag)
+mcs_adhd_sex_ratio <- MCS_sdq_adhd %>% dplyr::group_by(ADHD.Diagnosis.Age,Sex) %>% dplyr::summarize(count = n())
+
+mcs_adhd_sex_ratio
+```
+
+
+
+# SDQ total
+```{r}
+library(data.table)
+library(plotrix)
+# Early 
+MCS_adhd_early_sdq_ttl <- MCS_sdq_adhd_early[,c(1,9,15,21,27,33,39,45)]
+
+MCS_adhd_early_sdq_ttl_long <- melt(setDT(MCS_adhd_early_sdq_ttl), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_early_ttl_summary <- MCS_adhd_early_sdq_ttl_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    ttl_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_early_ttl_summary$group <- "early"
+
+# Late
+
+MCS_adhd_late_sdq_ttl <- MCS_sdq_adhd_late[,c(1,9,15,21,27,33,39,45)]
+
+MCS_adhd_late_sdq_ttl_long <- melt(setDT(MCS_adhd_late_sdq_ttl), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_late_ttl_summary <- MCS_adhd_late_sdq_ttl_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    ttl_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_late_ttl_summary$group <- "late"
+
+# No diagnosis
+
+MCS_no_diag_sdq_ttl <- MCS_sdq_no_diag[,c(1,9,15,21,27,33,39,42)]
+
+MCS_no_diag_sdq_ttl_long <- melt(setDT(MCS_no_diag_sdq_ttl), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_ttl_summary <- MCS_no_diag_sdq_ttl_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    ttl_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_no_diag_ttl_summary$group <- "no diag"
+```
+
+```{r}
+library(lavaan)
+MCS_adhd_glm <- 
+  "int =~ 1*BEBDTOT + 1*CEBDTOT + 1*DDDEBDTOT + 1*EEBDTOT + 1*FEBDTOT + 1*GEBDTOT
+   slp =~ 3*BEBDTOT + 5*CEBDTOT + 7*DDDEBDTOT + 11*EEBDTOT + 14*FEBDTOT + 17*GEBDTOT
+  
+"
+MCS_adhd_ttl_fit <- growth(MCS_adhd_glm, 
+                           data = MCS_sdq_adhd_all,group = "group",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+summary(MCS_adhd_ttl_fit)
+
+MCS_adhd_lgm_fit_early <- growth(MCS_adhd_glm, 
+                           data = MCS_sdq_adhd_early,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_lgm_fit_early)
+
+
+MCS_adhd_lgm_fit_late <- growth(MCS_adhd_glm, 
+                           data = MCS_sdq_adhd_late,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_lgm_fit_late)
+```
+
+```{r}
+
+MCS_adhd_glm_emo <- 
+  "int =~ 1*BEMOTION + 1*CEMOTION + 1*DDEMOTION + 1*EEMOTION + 1*FEMOTION + 1*GEMOTION
+   slp =~ 3*BEMOTION + 5*CEMOTION + 7*DDEMOTION + 11*EEMOTION + 14*FEMOTION + 17*GEMOTION
+  
+"
+
+
+MCS_adhd_emo_fit <- growth(MCS_adhd_glm_emo, data = MCS_sdq_adhd_all, group = "group",missing = "fiml",estimator = "ml", fixed.x = FALSE)
+summary(MCS_adhd_emo_fit)
+MCS_adhd_glm_emo_fit_early <- growth(MCS_adhd_glm_emo, 
+                           data = MCS_sdq_adhd_early,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_glm_emo_fit_early)
+
+
+MCS_adhd_glm_emo_fit_late <- growth(MCS_adhd_glm_emo, 
+                           data = MCS_sdq_adhd_late,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_glm_emo_fit_late)
+```
+
+```{r}
+
+MCS_adhd_glm_con <- 
+  "int =~ 1*BCONDUCT + 1*CCONDUCT + 1*DDCONDUCT + 1*ECONDUCT + 1*FCONDUCT + 1*GCONDUCT
+   slp =~ 3*BCONDUCT + 5*CCONDUCT + 7*DDCONDUCT + 11*ECONDUCT + 14*FCONDUCT + 17*GCONDUCT
+  
+"
+MCS_adhd_con_fit <- growth(MCS_adhd_glm_con, data = MCS_sdq_adhd_all, group = "group", missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE)
+
+MCS_adhd_glm_con_fit_early <- growth(MCS_adhd_glm_con, 
+                           data = MCS_sdq_adhd_early,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_glm_con_fit_early)
+
+
+MCS_adhd_glm_con_fit_late <- growth(MCS_adhd_glm_con, 
+                           data = MCS_sdq_adhd_late,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_glm_con_fit_late)
+```
+
+```{r}
+
+MCS_adhd_glm_hyper <- 
+  "int =~ 1*BHYPER + 1*CHYPER + 1*DDHYPER + 1*EHYPER + 1*FHYPER + 1*GHYPER
+   slp =~ 3*BHYPER + 5*CHYPER + 7*DDHYPER + 11*EHYPER + 14*FHYPER + 17*GHYPER
+  
+"
+MCS_adhd_hyp_fit <- growth(MCS_adhd_glm_hyper, data = MCS_sdq_adhd_all, group = "group", missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE)
+
+MCS_adhd_glm_hyper_fit_early <- growth(MCS_adhd_glm_hyper, 
+                           data = MCS_sdq_adhd_early,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_glm_hyper_fit_early)
+
+
+MCS_adhd_glm_hyper_fit_late <- growth(MCS_adhd_glm_hyper, 
+                           data = MCS_sdq_adhd_late,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_glm_hyper_fit_late)
+```
+
+```{r}
+
+MCS_adhd_glm_peer <- 
+  "int =~ 1*BPEER + 1*CPEER + 1*DDPEER + 1*EPEER + 1*FPEER + 1*GPEER
+   slp =~ 3*BPEER + 5*CPEER + 7*DDPEER + 11*EPEER + 14*FPEER + 17*GPEER
+  
+"
+MCS_adhd_peer_fit <- growth(MCS_adhd_glm_peer, 
+                           data = MCS_sdq_adhd_all,
+                           group = "group",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+MCS_adhd_lgm_peer_fit_early <- growth(MCS_adhd_glm_peer, 
+                           data = MCS_sdq_adhd_early,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_lgm_peer_fit_early)
+
+
+MCS_adhd_lgm_peer_fit_late <- growth(MCS_adhd_glm_peer, 
+                           data = MCS_sdq_adhd_late,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_lgm_peer_fit_late)
+```
+```{r}
+
+MCS_adhd_glm_psoc <- 
+  "int =~ 1*BPROSOC + 1*CPROSOC + 1*DDPROSOC + 1*EPROSOC + 1*FPROSOC + 1*GPROSOC
+   slp =~ 3*BPROSOC + 5*CPROSOC + 7*DDPROSOC + 11*EPROSOC + 14*FPROSOC + 17*GPROSOC
+  
+"
+MCS_adhd_pro_fit <- growth(MCS_adhd_glm_psoc, 
+                           data = MCS_sdq_adhd_all,
+                           group = "group",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+MCS_adhd_lgm_psoc_fit_early <- growth(MCS_adhd_glm_psoc, 
+                           data = MCS_sdq_adhd_early,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_lgm_psoc_fit_early)
+
+
+MCS_adhd_lgm_psoc_fit_late <- growth(MCS_adhd_glm_psoc, 
+                           data = MCS_sdq_adhd_late,
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(MCS_adhd_lgm_psoc_fit_late)
+```
+
+```{r}
+est_mcs_adhd_ttl_fit <- parameterEstimates(MCS_adhd_ttl_fit) %>% subset(lhs %in% c("int", "slp") & op == "~1")
+results_mcs_adhd_ttl <- est_mcs_adhd_ttl_fit %>%
+  dplyr::select(lhs,group, est, ci.lower, ci.upper, pvalue) %>%
+  mutate(Estimates = paste(round(est, 2), " [", round(ci.lower, 2), ", ", round(ci.upper, 2), "]"),
+         p_value = round(pvalue,3)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+
+est_mcs_adhd_emo_fit <- parameterEstimates(MCS_adhd_emo_fit) %>% subset(lhs %in% c("int", "slp") & op == "~1")
+results_mcs_adhd_emo <- est_mcs_adhd_emo_fit %>%
+  dplyr::select(lhs,group, est, ci.lower, ci.upper, pvalue) %>%
+  mutate(Estimates = paste(round(est, 2), " [", round(ci.lower, 2), ", ", round(ci.upper, 2), "]"),
+         p_value = round(pvalue,3)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+
+est_mcs_adhd_con_fit <- parameterEstimates(MCS_adhd_con_fit) %>% subset(lhs %in% c("int", "slp") & op == "~1")
+results_mcs_adhd_con <- est_mcs_adhd_con_fit %>%
+  dplyr::select(lhs,group, est, ci.lower, ci.upper, pvalue) %>%
+  mutate(Estimates = paste(round(est, 2), " [", round(ci.lower, 2), ", ", round(ci.upper, 2), "]"),
+         p_value = round(pvalue,3)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+
+est_mcs_adhd_hyp_fit <- parameterEstimates(MCS_adhd_hyp_fit) %>% subset(lhs %in% c("int", "slp") & op == "~1")
+results_mcs_adhd_hyp <- est_mcs_adhd_hyp_fit %>%
+  dplyr::select(lhs,group, est, ci.lower, ci.upper, pvalue) %>%
+  mutate(Estimates = paste(round(est, 2), " [", round(ci.lower, 2), ", ", round(ci.upper, 2), "]"),
+         p_value = round(pvalue,3)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+
+est_mcs_adhd_peer_fit <- parameterEstimates(MCS_adhd_peer_fit) %>% subset(lhs %in% c("int", "slp") & op == "~1")
+results_mcs_adhd_peer <- est_mcs_adhd_peer_fit %>%
+  dplyr::select(lhs,group, est, ci.lower, ci.upper, pvalue) %>%
+  mutate(Estimates = paste(round(est, 2), " [", round(ci.lower, 2), ", ", round(ci.upper, 2), "]"),
+         p_value = round(pvalue,3)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+
+est_mcs_adhd_pro_fit <- parameterEstimates(MCS_adhd_pro_fit) %>% subset(lhs %in% c("int", "slp") & op == "~1")
+results_mcs_adhd_pro <- est_mcs_adhd_pro_fit %>%
+  dplyr::select(lhs,group, est, ci.lower, ci.upper, pvalue) %>%
+  mutate(Estimates = paste(round(est, 2), " [", round(ci.lower, 2), ", ", round(ci.upper, 2), "]"),
+         p_value = round(pvalue,3)) %>%
+  dplyr::select(lhs,group,Estimates, p_value)
+
+
+mcs_adhd_results <- rbind(results_mcs_adhd_ttl,results_mcs_adhd_emo,results_mcs_adhd_con,results_mcs_adhd_hyp,results_mcs_adhd_peer,results_mcs_adhd_pro)
+mcs_adhd_results
+```
+
+
+
+```{r}
+MCS_adhd_early_ttl_summary$lb = MCS_adhd_early_ttl_summary$ttl_mean - 1.96*MCS_adhd_early_ttl_summary$se
+MCS_adhd_early_ttl_summary$ub = MCS_adhd_early_ttl_summary$ttl_mean + 1.96*MCS_adhd_early_ttl_summary$se
+MCS_adhd_late_ttl_summary$lb = MCS_adhd_late_ttl_summary$ttl_mean - 1.96*MCS_adhd_late_ttl_summary$se
+MCS_adhd_late_ttl_summary$ub = MCS_adhd_late_ttl_summary$ttl_mean + 1.96*MCS_adhd_late_ttl_summary$se
+MCS_no_diag_ttl_summary$ub = MCS_no_diag_ttl_summary$ttl_mean + 1.96*MCS_no_diag_ttl_summary$se
+MCS_no_diag_ttl_summary$lb = MCS_no_diag_ttl_summary$ttl_mean - 1.96*MCS_no_diag_ttl_summary$se
+MCS_sdq_total_mean_full <- full_join(full_join(MCS_adhd_early_ttl_summary, MCS_adhd_late_ttl_summary), MCS_no_diag_ttl_summary)
+MCS_sdq_total_mean_full
+```
+
+```{r}
+library(RColorBrewer)
+my_colors <- brewer.pal(12, "Paired")[c(2,8,4)]
+p <- ggplot(MCS_sdq_total_mean_full, aes(x = as.numeric(sweep.age), y = ttl_mean, colour = group)) + geom_line(data = MCS_sdq_total_mean_full, aes(x = as.numeric(sweep.age), y = ttl_mean, colour = group)) + geom_point() 
+p
+
+
+
+breaks = seq(min(as.numeric(MCS_no_diag_ttl_summary$sweep)),max(as.numeric(MCS_no_diag_ttl_summary$sweep)), length.out = 6)
+age <- c("3","5","7","11","14","17")
+MCS_sdq_total_mean_full <- MCS_sdq_total_mean_full %>% mutate(sweep.age = case_when(
+  sweep == "BEBDTOT" ~ 3,
+  sweep == "CEBDTOT" ~ 5,
+   sweep == "DDDEBDTOT" ~ 7,
+   sweep == "EEBDTOT" ~ 11,
+   sweep == "FEBDTOT" ~ 14,
+   sweep == "GEBDTOT" ~ 17,
+))
+MCS_full_ttl_in_display <- p+geom_ribbon(data = MCS_sdq_total_mean_full, aes(x = sweep.age,ymin = lb, ymax = ub), linetype = 2, alpha = 0.2) + scale_x_continuous(breaks = as.numeric(age) ,labels= age) + labs(y = "SDQ Total Score", x = "age(years)")+ scale_colour_manual(values = my_colors)+theme_classic()+ theme(legend.position = "none")
+
+MCS_full_ttl_in_display
+
+```
+
+
+# Emotional Symptoms
+```{r}
+# Early 
+MCS_adhd_early_sdq_emo <- MCS_sdq_adhd_early[,c(1,4,10,16,22,28,34,45)]
+
+MCS_adhd_early_sdq_emo_long <- melt(setDT(MCS_adhd_early_sdq_emo), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_early_emo_summary <- MCS_adhd_early_sdq_emo_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    emo_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_early_emo_summary$group <- "early"
+
+# Late
+
+MCS_adhd_late_sdq_emo <- MCS_sdq_adhd_late[,c(1,4,10,16,22,28,34,45)]
+
+MCS_adhd_late_sdq_emo_long <- melt(setDT(MCS_adhd_late_sdq_emo), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_late_emo_summary <- MCS_adhd_late_sdq_emo_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    emo_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_late_emo_summary$group <- "late"
+
+# No diagnosis
+
+MCS_no_diag_sdq_emo <- MCS_sdq_no_diag[,c(1,4,10,16,22,28,34,42)]
+
+MCS_no_diag_sdq_emo_long <- melt(setDT(MCS_no_diag_sdq_emo), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_emo_summary <- MCS_no_diag_sdq_emo_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    emo_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_no_diag_emo_summary$group <- "no diag"
+```
+
+
+```{r}
+MCS_adhd_early_emo_summary$lb = MCS_adhd_early_emo_summary$emo_mean - 1.96*MCS_adhd_early_emo_summary$se
+MCS_adhd_early_emo_summary$ub = MCS_adhd_early_emo_summary$emo_mean + 1.96*MCS_adhd_early_emo_summary$se
+MCS_adhd_late_emo_summary$lb = MCS_adhd_late_emo_summary$emo_mean - 1.96*MCS_adhd_late_emo_summary$se
+MCS_adhd_late_emo_summary$ub = MCS_adhd_late_emo_summary$emo_mean + 1.96*MCS_adhd_late_emo_summary$se
+MCS_no_diag_emo_summary$ub = MCS_no_diag_emo_summary$emo_mean + 1.96*MCS_no_diag_emo_summary$se
+MCS_no_diag_emo_summary$lb = MCS_no_diag_emo_summary$emo_mean - 1.96*MCS_no_diag_emo_summary$se
+MCS_sdq_Emotional_mean_full <- full_join(full_join(MCS_adhd_early_emo_summary, MCS_adhd_late_emo_summary), MCS_no_diag_emo_summary)
+MCS_sdq_Emotional_mean_full
+```
+
+```{r}
+MCS_sdq_Emotional_mean_full <- MCS_sdq_Emotional_mean_full %>% mutate(sweep.age = case_when(
+  sweep == "BEMOTION" ~ 3,
+  sweep == "CEMOTION" ~ 5,
+  sweep == "DDEMOTION" ~ 7,
+  sweep == "EEMOTION" ~ 11,
+  sweep == "FEMOTION" ~ 14,
+  sweep == "GEMOTION" ~ 17,
+))
+p <- ggplot(MCS_sdq_Emotional_mean_full, aes(x = as.numeric(sweep.age), y = emo_mean, colour = group)) + geom_line(data = MCS_sdq_Emotional_mean_full, aes(x = as.numeric(sweep.age), y = emo_mean, colour = group)) + geom_point() 
+p
+
+
+
+breaks = seq(min(as.numeric(MCS_no_diag_emo_summary$sweep)),max(as.numeric(MCS_no_diag_emo_summary$sweep)), length.out = 6)
+
+MCS_full_emo_in_display <- p+geom_ribbon(data = MCS_sdq_Emotional_mean_full, aes(x = as.numeric(sweep.age),ymin = lb, ymax = ub), linetype = 2, alpha = 0.2) + scale_x_continuous(breaks = as.numeric(age) ,labels= age) + labs(y = "Emotional Symptoms Score", x = "age(years)") + scale_colour_manual(values = my_colors)+ theme_classic() + theme(legend.position = "none")
+
+MCS_full_emo_in_display
+
+```
+
+
+
+# Conduct Problems
+
+```{r}
+# Early 
+MCS_adhd_early_sdq_con <- MCS_sdq_adhd_early[,c(1,5,11,17,23,29,35,45)]
+
+MCS_adhd_early_sdq_con_long <- melt(setDT(MCS_adhd_early_sdq_con), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_early_con_summary <- MCS_adhd_early_sdq_con_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    con_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_early_con_summary$group <- "early"
+
+# Late
+
+MCS_adhd_late_sdq_con <- MCS_sdq_adhd_late[,c(1,5,11,17,23,29,35,45)]
+
+MCS_adhd_late_sdq_con_long <- melt(setDT(MCS_adhd_late_sdq_con), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_late_con_summary <- MCS_adhd_late_sdq_con_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    con_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_late_con_summary$group <- "late"
+
+# No diagnosis
+
+MCS_no_diag_sdq_con <- MCS_sdq_no_diag[,c(1,5,11,17,23,29,35,42)]
+
+MCS_no_diag_sdq_con_long <- melt(setDT(MCS_no_diag_sdq_con), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_con_summary <- MCS_no_diag_sdq_con_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    con_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_no_diag_con_summary$group <- "no diag"
+```
+
+
+
+```{r}
+MCS_adhd_early_con_summary$lb = MCS_adhd_early_con_summary$con_mean - 1.96*MCS_adhd_early_con_summary$se
+MCS_adhd_early_con_summary$ub = MCS_adhd_early_con_summary$con_mean + 1.96*MCS_adhd_early_con_summary$se
+MCS_adhd_late_con_summary$lb = MCS_adhd_late_con_summary$con_mean - 1.96*MCS_adhd_late_con_summary$se
+MCS_adhd_late_con_summary$ub = MCS_adhd_late_con_summary$con_mean + 1.96*MCS_adhd_late_con_summary$se
+MCS_no_diag_con_summary$ub = MCS_no_diag_con_summary$con_mean + 1.96*MCS_no_diag_con_summary$se
+MCS_no_diag_con_summary$lb = MCS_no_diag_con_summary$con_mean - 1.96*MCS_no_diag_con_summary$se
+MCS_sdq_Conduct_mean_full <- full_join(full_join(MCS_adhd_early_con_summary, MCS_adhd_late_con_summary), MCS_no_diag_con_summary)
+MCS_sdq_Conduct_mean_full
+```
+
+```{r}
+MCS_sdq_Conduct_mean_full <- MCS_sdq_Conduct_mean_full %>% mutate(sweep.age = case_when(
+  sweep == "BCONDUCT" ~ 3,
+  sweep == "CCONDUCT" ~ 5,
+  sweep == "DDCONDUCT" ~ 7,
+  sweep == "ECONDUCT" ~ 11,
+  sweep == "FONDUCT" ~ 14,
+  sweep == "GCONDUCT" ~ 17,
+))
+p <- ggplot(MCS_sdq_Conduct_mean_full, aes(x = as.numeric(sweep.age), y = con_mean, colour = group)) + geom_line(data = MCS_sdq_Conduct_mean_full, aes(x = as.numeric(sweep.age), y = con_mean, colour = group)) + geom_point() 
+p
+
+
+
+breaks = seq(min(as.numeric(MCS_no_diag_con_summary$sweep)),max(as.numeric(MCS_no_diag_con_summary$sweep)), length.out = 6)
+
+MCS_full_con_in_display <- p+geom_ribbon(data = MCS_sdq_Conduct_mean_full, aes(x = as.numeric(sweep.age),ymin = lb, ymax = ub), linetype = 2, alpha = 0.2) + scale_x_continuous(breaks = as.numeric(age) ,labels= age) + labs(y = "Conduct Problems Score", x = "age(years)") + scale_colour_manual(values = my_colors)+ theme_classic()+ theme(legend.position = "none")
+
+
+MCS_full_con_in_display
+
+```
+
+
+
+
+
+
+# Hyperactivity
+
+```{r}
+# Early 
+MCS_adhd_early_sdq_hyp <- MCS_sdq_adhd_early[,c(1,6,12,18,24,30,36,45)]
+
+MCS_adhd_early_sdq_hyp_long <- melt(setDT(MCS_adhd_early_sdq_hyp), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_early_hyp_summary <- MCS_adhd_early_sdq_hyp_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    hyp_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_early_hyp_summary$group <- "early"
+
+# Late
+
+MCS_adhd_late_sdq_hyp <- MCS_sdq_adhd_late[,c(1,6,12,18,24,30,36,45)]
+
+MCS_adhd_late_sdq_hyp_long <- melt(setDT(MCS_adhd_late_sdq_hyp), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_late_hyp_summary <- MCS_adhd_late_sdq_hyp_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    hyp_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_late_hyp_summary$group <- "late"
+
+# No diagnosis
+
+MCS_no_diag_sdq_hyp <- MCS_sdq_no_diag[,c(1,6,12,18,24,30,36,42)]
+
+MCS_no_diag_sdq_hyp_long <- melt(setDT(MCS_no_diag_sdq_hyp), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_hyp_summary <- MCS_no_diag_sdq_hyp_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    hyp_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_no_diag_hyp_summary$group <- "no diag"
+```
+
+
+```{r}
+MCS_adhd_early_hyp_summary$lb = MCS_adhd_early_hyp_summary$hyp_mean - 1.96*MCS_adhd_early_hyp_summary$se
+MCS_adhd_early_hyp_summary$ub = MCS_adhd_early_hyp_summary$hyp_mean + 1.96*MCS_adhd_early_hyp_summary$se
+MCS_adhd_late_hyp_summary$lb = MCS_adhd_late_hyp_summary$hyp_mean - 1.96*MCS_adhd_late_hyp_summary$se
+MCS_adhd_late_hyp_summary$ub = MCS_adhd_late_hyp_summary$hyp_mean + 1.96*MCS_adhd_late_hyp_summary$se
+MCS_no_diag_hyp_summary$ub = MCS_no_diag_hyp_summary$hyp_mean + 1.96*MCS_no_diag_hyp_summary$se
+MCS_no_diag_hyp_summary$lb = MCS_no_diag_hyp_summary$hyp_mean - 1.96*MCS_no_diag_hyp_summary$se
+MCS_sdq_hyperactivity_mean_full <- full_join(full_join(MCS_adhd_early_hyp_summary, MCS_adhd_late_hyp_summary), MCS_no_diag_hyp_summary)
+MCS_sdq_hyperactivity_mean_full
+```
+
+```{r}
+MCS_sdq_hyperactivity_mean_full <- MCS_sdq_hyperactivity_mean_full %>% dplyr::mutate(sweep.age = case_when(
+  sweep == "BHYPER" ~ 3,
+  sweep == "CHYPER" ~ 5,
+  sweep == "DDHYPER" ~ 7,
+  sweep == "EHYPER" ~ 11,
+  sweep == "FHYPER" ~ 14,
+  sweep == "GHYPER" ~ 17
+))
+p <- ggplot(MCS_sdq_hyperactivity_mean_full, aes(x = as.numeric(sweep.age), y = hyp_mean, colour = group)) + geom_line(data = MCS_sdq_hyperactivity_mean_full, aes(x = as.numeric(sweep.age), y = hyp_mean, colour = group)) + geom_point() 
+p
+
+
+
+breaks = seq(min(as.numeric(MCS_no_diag_hyp_summary$sweep)),max(as.numeric(MCS_no_diag_hyp_summary$sweep)), length.out = 6)
+
+MCS_full_hyp_in_display <- p+geom_ribbon(data = MCS_sdq_hyperactivity_mean_full, aes(x = as.numeric(sweep.age),ymin = lb, ymax = ub), linetype = 2, alpha = 0.2) + scale_x_continuous(breaks = as.numeric(age) ,labels= age) + labs(y = "Hyperactivity/Inattention Score", x = "age(years)") + scale_colour_manual(values = my_colors)+ theme_classic() + theme(legend.position = "none")
+
+
+
+MCS_full_hyp_in_display
+
+```
+
+
+
+# Peer Relationship
+
+```{r}
+# Early 
+MCS_adhd_early_sdq_peer <- MCS_sdq_adhd_early[,c(1,7,13,19,25,31,37,45)]
+
+MCS_adhd_early_sdq_peer_long <- melt(setDT(MCS_adhd_early_sdq_peer), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_early_peer_summary <- MCS_adhd_early_sdq_peer_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    peer_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_early_peer_summary$group <- "early"
+
+# Late
+
+MCS_adhd_late_sdq_peer <- MCS_sdq_adhd_late[,c(1,7,13,19,25,31,37,45)]
+
+MCS_adhd_late_sdq_peer_long <- melt(setDT(MCS_adhd_late_sdq_peer), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_late_peer_summary <- MCS_adhd_late_sdq_peer_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    peer_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_late_peer_summary$group <- "late"
+
+# No diagnosis
+
+MCS_no_diag_sdq_peer <- MCS_sdq_no_diag[,c(1,7,13,19,25,31,37,42)]
+
+MCS_no_diag_sdq_peer_long <- melt(setDT(MCS_no_diag_sdq_peer), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_peer_summary <- MCS_no_diag_sdq_peer_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    peer_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_no_diag_peer_summary$group <- "no diag"
+```
+
+
+
+```{r}
+MCS_adhd_early_peer_summary$lb = MCS_adhd_early_peer_summary$peer_mean - 1.96*MCS_adhd_early_peer_summary$se
+MCS_adhd_early_peer_summary$ub = MCS_adhd_early_peer_summary$peer_mean + 1.96*MCS_adhd_early_peer_summary$se
+MCS_adhd_late_peer_summary$lb = MCS_adhd_late_peer_summary$peer_mean - 1.96*MCS_adhd_late_peer_summary$se
+MCS_adhd_late_peer_summary$ub = MCS_adhd_late_peer_summary$peer_mean + 1.96*MCS_adhd_late_peer_summary$se
+MCS_no_diag_peer_summary$ub = MCS_no_diag_peer_summary$peer_mean + 1.96*MCS_no_diag_peer_summary$se
+MCS_no_diag_peer_summary$lb = MCS_no_diag_peer_summary$peer_mean - 1.96*MCS_no_diag_peer_summary$se
+MCS_sdq_peer_mean_full <- full_join(full_join(MCS_adhd_early_peer_summary, MCS_adhd_late_peer_summary), MCS_no_diag_peer_summary)
+MCS_sdq_peer_mean_full
+```
+
+```{r}
+MCS_sdq_peer_mean_full <- MCS_sdq_peer_mean_full %>% mutate(sweep.age = case_when(
+  sweep == "BPEER" ~ 3,
+   sweep == "CPEER" ~5,
+   sweep == "DDPEER" ~7,
+   sweep == "EPEER" ~11,
+   sweep == "FPEER" ~ 14,
+   sweep == "GPEER" ~17
+))
+p <- ggplot(MCS_sdq_peer_mean_full, aes(x = as.numeric(sweep.age), y = peer_mean, colour = group)) + geom_line(data = MCS_sdq_peer_mean_full, aes(x = as.numeric(sweep.age), y = peer_mean, colour = group)) + geom_point() 
+p
+
+
+
+breaks = seq(min(as.numeric(MCS_no_diag_peer_summary$sweep)),max(as.numeric(MCS_no_diag_peer_summary$sweep)), length.out = 6)
+
+MCS_full_peer_in_display <- p+geom_ribbon(data = MCS_sdq_peer_mean_full, aes(x = as.numeric(sweep.age),ymin = lb, ymax = ub), linetype = 2, alpha = 0.2) + scale_x_continuous(breaks = as.numeric(age) ,labels= age) + labs(y = "Peer Relationship Problems Score", x = "age(years)") + scale_colour_manual(values = my_colors)+theme_classic()+ theme(legend.position = "none")
+
+
+MCS_full_peer_in_display
+
+```
+
+
+
+
+# Prosocialness
+
+
+```{r}
+# Early 
+MCS_adhd_early_sdq_pro <- MCS_sdq_adhd_early[,c(1,8,14,20,26,32,38,45)]
+
+MCS_adhd_early_sdq_pro_long <- melt(setDT(MCS_adhd_early_sdq_pro), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_early_pro_summary <- MCS_adhd_early_sdq_pro_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    pro_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_early_pro_summary$group <- "early"
+
+# Late
+
+MCS_adhd_late_sdq_pro <- MCS_sdq_adhd_late[,c(1,8,14,20,26,32,38,45)]
+
+MCS_adhd_late_sdq_pro_long <- melt(setDT(MCS_adhd_late_sdq_pro), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_adhd_late_pro_summary <- MCS_adhd_late_sdq_pro_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    pro_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_adhd_late_pro_summary$group <- "late"
+
+# No diagnosis
+
+MCS_no_diag_sdq_pro <- MCS_sdq_no_diag[,c(1,8,14,20,26,32,38,42)]
+
+MCS_no_diag_sdq_pro_long <- melt(setDT(MCS_no_diag_sdq_pro), id.vars = c("MCSID","Sex"), variable.name = "sweep")
+
+MCS_no_diag_pro_summary <- MCS_no_diag_sdq_pro_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    pro_mean = mean(value),
+    se = std.error(value)
+  )
+MCS_no_diag_pro_summary$group <- "no diag"
+```
+
+
+
+
+```{r}
+MCS_adhd_early_pro_summary$lb = MCS_adhd_early_pro_summary$pro_mean - 1.96*MCS_adhd_early_pro_summary$se
+MCS_adhd_early_pro_summary$ub = MCS_adhd_early_pro_summary$pro_mean + 1.96*MCS_adhd_early_pro_summary$se
+MCS_adhd_late_pro_summary$lb = MCS_adhd_late_pro_summary$pro_mean - 1.96*MCS_adhd_late_pro_summary$se
+MCS_adhd_late_pro_summary$ub = MCS_adhd_late_pro_summary$pro_mean + 1.96*MCS_adhd_late_pro_summary$se
+MCS_no_diag_pro_summary$ub = MCS_no_diag_pro_summary$pro_mean + 1.96*MCS_no_diag_pro_summary$se
+MCS_no_diag_pro_summary$lb = MCS_no_diag_pro_summary$pro_mean - 1.96*MCS_no_diag_pro_summary$se
+MCS_sdq_prosocial_mean_full <- full_join(full_join(MCS_adhd_early_pro_summary, MCS_adhd_late_pro_summary), MCS_no_diag_pro_summary)
+MCS_sdq_prosocial_mean_full
+```
+
+```{r}
+MCS_sdq_prosocial_mean_full <- MCS_sdq_prosocial_mean_full %>% mutate(sweep.age = case_when(
+  sweep == "BPROSOC" ~3,
+   sweep == "CPROSOC" ~ 5,
+   sweep == "DDPROSOC" ~ 7,
+   sweep == "EPROSOC" ~ 11,
+   sweep == "FPROSOC" ~ 14,
+   sweep == "GPROSOC" ~ 17
+))
+p <- ggplot(MCS_sdq_prosocial_mean_full, aes(x = as.numeric(sweep.age), y = pro_mean, colour = group)) + geom_line(data = MCS_sdq_prosocial_mean_full, aes(x = as.numeric(sweep.age), y = pro_mean, colour = group)) + geom_point() 
+p
+
+
+
+breaks = seq(min(as.numeric(MCS_no_diag_pro_summary$sweep)),max(as.numeric(MCS_no_diag_pro_summary$sweep)), length.out = 6)
+
+MCS_full_pro_in_display <- p+geom_ribbon(data = MCS_sdq_prosocial_mean_full, aes(x = as.numeric(sweep.age),ymin = lb, ymax = ub), linetype = 2, alpha = 0.2) + scale_x_continuous(breaks = as.numeric(age) ,labels= age) + labs(y = "Prosocial Behaviours Score", x = "age(years)") + scale_colour_manual(values = my_colors)+ theme_classic() + theme(legend.position = "none")
+
+
+
+MCS_full_pro_in_display
+
+```
+
+```{r}
+pdf("/Users/zhangxinhe/Documents/who recieves a diagnosis/Figures FINAL/mcs_adhd_traj.pdf", width = 10,height = 6)
+print(MCS_full_ttl_in_display) 
+print(MCS_full_emo_in_display)
+print(MCS_full_con_in_display)
+print(MCS_full_hyp_in_display)
+print(MCS_full_peer_in_display)
+print(MCS_full_pro_in_display)
+dev.off()
+```
+
+
+
+

@@ -1,0 +1,246 @@
+---
+title: "MCS_adhd_tip_regression"
+author: "Yira Zhang"
+date: "2023-03-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(tidyverse)
+
+```
+## Data
+```{r}
+library(data.table)
+library(readr)
+MCS_adhd <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_SDQ_adhd.csv") # 188 in total
+mcs2_parent_interview <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_parent_interview.tab")
+mcs_ID_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ID_identifier.csv")
+mcs_ethnicity_mbirth_age <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_race_mbirthage.csv")
+mcs2_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_ses_identifier.csv")
+mcs2_dep_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_deprivation_identifier.csv") 
+mcs2_family_derived <- read_delim("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_data/UKDA-5350-tab/tab/mcs2_family_derived.tab")
+mcs2_other_ses_identifier <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_other_ses_identifier.csv")
+mcs_adhd_gmm_2_group <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/MCS_adhd_gmm_group_membership.csv") # 1 = decreasing line; 2 = increasing line; prosocial is a bit tricky as two/three/four groups gave similar BIC, so went with 2-group solution to stay consistent with other subscales
+MCS_sdq_adhd <- MCS_adhd[,c(1:21,34:39,22:33,40:45)]
+```
+
+
+```{r}
+mcs_adhd_IQ <- mcs_ID_identifier[mcs_ID_identifier$mcs_cog_pca.MCSID %in% MCS_sdq_adhd$MCSID, ]
+mcs_adhd_IQ <- mcs_adhd_IQ[,2:6]
+colnames(mcs_adhd_IQ) <- c("MCSID","CNUM00","CMID","PC1","ID")
+mcs1_ethnicity <- mcs_ethnicity_mbirth_age[,2:6]
+mcs1_birth_age <- mcs_ethnicity_mbirth_age[,c(2,7,8)]
+mcs_adhd_eth <- mcs1_ethnicity[mcs1_ethnicity$MCSID %in% MCS_sdq_adhd$MCSID, ]
+mcs_adhd_mbirthage <- mcs1_birth_age[mcs1_birth_age$MCSID %in% MCS_sdq_adhd$MCSID, ]
+
+mcs_adhd_other_ses <- mcs2_other_ses_identifier[mcs2_other_ses_identifier$MCSID %in% MCS_sdq_adhd$MCSID,]
+mcs_adhd_other_ses <- mcs_adhd_other_ses[,c(2:6,8)]
+
+mcs_adhd_dep <- mcs2_dep_identifier[mcs2_dep_identifier$MCSID %in% MCS_sdq_adhd$MCSID, ]
+mcs_adhd_dep <- mcs_adhd_dep[,1:8]
+
+all_tip_list = list(mcs_adhd_IQ, mcs_adhd_eth, mcs_adhd_mbirthage, mcs_adhd_other_ses, mcs_adhd_dep)
+mcs_adhd_all_tip <- all_tip_list %>% reduce(inner_join, by = "MCSID")  
+mcs_adhd_all_tip <- mcs_adhd_all_tip[!duplicated(mcs_adhd_all_tip$CMID), ]
+
+
+```
+
+```{r}
+mcs_adhd_all_tip_gmm <- inner_join(mcs_adhd_all_tip, mcs_adhd_gmm_2_group, by = "MCSID")
+mcs_adhd_all_tip_gmm <- mcs_adhd_all_tip_gmm[,c(1:3,26,25,4,7:23,27:32)]
+colnames(mcs_adhd_all_tip_gmm) <- c("MCSID","CNUM00","CMID","Sex","diag.age" ,"IQ","Eth","Eth_11","Eth_8","MBA"   ,"mBirthdage_grp","IncomeQuant","LabourMrtSts","OECDPov","HouseTen","SES","ccountry","dep_Overall", "dep_Income","dep_Employment","dep_HealthDisability","dep_EduSkillTrain","dep","ttl","emo","con","hyp","peer","pro")
+
+```
+
+
+# Regression
+```{r}
+mcs_adhd_all_tip_gmm$eth_m <- ifelse(mcs_adhd_all_tip_gmm$Eth == 1, 0,1)
+adhd_fit_all <- lm(diag.age ~ Sex + IQ + eth_m  + MBA + SES + dep + ttl + emo + con + hyp + peer + pro, data= mcs_adhd_all_tip_gmm)
+summary(adhd_fit_all)
+sjPlot::tab_model(adhd_fit_all)
+```
+```{r}
+library(car)
+vif(fit_all)
+
+```
+```{r}
+library(relaimpo)
+calc.relimp(fit_all,type=c("lmg","last","first","pratt"),
+   rela=TRUE)
+boot_adhd <- boot.relimp(fit_all, b = 100, type = c("lmg",
+  "last", "first", "pratt"), rank = TRUE,
+  diff = TRUE, rela = TRUE)
+booteval.relimp(boot) # print result
+png("relative_importance_plot_adhd.png", width = 800, height = 600)
+
+plot(booteval.relimp(boot_adhd,sort=TRUE)) # plot result
+```
+
+
+
+```{r}
+# Bootstrap Measures of Relative Importance (100 samples)
+boot_lmg <- boot.relimp(fit_all, b = 100, type = "lmg", rank = TRUE,
+  diff = TRUE, rela = TRUE)
+boot_last <- boot.relimp(fit_all, b = 100, type = "last", rank = TRUE, 
+  diff = TRUE, rela = TRUE)
+boot_first <- boot.relimp(fit_all, b = 100, type = "first", rank = TRUE, 
+  diff = TRUE, rela = TRUE)
+boot_pratt <- boot.relimp(fit_all, b = 100, type = "pratt", rank = TRUE, 
+  diff = TRUE, rela = TRUE)
+
+booteval.relimp(boot_lmg) 
+booteval.relimp(boot_first)
+booteval.relimp(boot_last)
+booteval.relimp(boot_pratt)
+
+```
+```{r}
+
+plot(booteval.relimp(boot_lmg,sort=TRUE), level = 0.9) # lmg is the R-squared contribution averaged over orderings of regressors
+plot(booteval.relimp(boot_first,sort=TRUE), level = 0.9) # first is each variables contribution when included first,  which is just the squared covariance between y and the variable.
+plot(booteval.relimp(boot_last,sort=TRUE), level = 0.9) # last is each variables when included last, also sometimes called usefulness.
+plot(booteval.relimp(boot_pratt,sort=TRUE), level = 0.9) # pratt is the product of the standardized coefficient and the correlation.
+```
+
+```{r}
+
+library(lavaan)
+
+# Create the mediation model
+
+adhd_model_1 <- "
+  # direct effects
+  diag.age ~ Sex + IQ + eth_m + MBA + SES + dep + ttl + emo + con + hyp + peer + pro
+  "
+
+adhd_fit_1 <- lavaan::sem(adhd_model_1, data = mcs_adhd_all_tip_gmm)
+adhd_fit1_cor <- lavInspect(adhd_fit_1, "cor.all")
+misty::dominance.manual(adhd_fit1_cor)
+lavTech(adhd_fit_1, "rsquare", add.labels = T)
+
+ # for one layer, using summary will encounter a bug, so using lavTech or lavInspect 
+# see https://github.com/yrosseel/lavaan/issues/290
+```
+
+
+
+```{r}
+library(tidySEM)
+model_2 <- "
+
+  diag.age ~ s*Sex + i*IQ + e*eth_m + m*MBA + se*SES + de*dep + t*ttl + em*emo + co*con + h*hyp + p*peer + pr*pro
+
+  ttl ~ i1*IQ + de1*dep + se1*SES + m1*MBA + s1*Sex + e1*eth_m
+  emo ~ i2*IQ + de2*dep + se2*SES + m2*MBA + s2*Sex + e2*eth_m
+  con ~ i3*IQ + de3*dep + se3*SES + m3*MBA + s3*Sex + e3*eth_m
+  hyp ~ i4*IQ + de4*dep + se4*SES + m4*MBA + s4*Sex+ e4*eth_m
+  peer ~ i5*IQ + de5*dep + se5*SES + m5*MBA + s5*Sex+ e5*eth_m
+  pro ~ i6*IQ + de6*dep + se6*SES + m6*MBA + s6*Sex+ e6*eth_m
+  
+  
+ indirect_ttl := i1*t  +de1*t+se1*t+m1*t +s1*t+ e1*t
+ indirect_emo := i2*em  +de2*em+se2*em+m2*em +s2*em+ e2*em
+ indirect_con := i3*co  +de3*co+se3*co+m3*co +s3*co+ e3*co
+ indirect_hyp := i4*h  +de4*h+se4*h+m4*h +s4*h+ e4*h
+ indirect_peer := i5*p  +de5*p+se5*p+m5*p +s5*p+ e5*p
+ indirect_pro := i6*pr  +de6*pr+se6*pr+m6*pr +s6*pr+ e6*pr
+ 
+direct := s + i + e +m + se + de
+total_indirect := indirect_ttl + indirect_emo + indirect_con + indirect_hyp + indirect_peer + indirect_pro
+total := direct + total_indirect
+  
+"
+set.seed(060524)
+serial_mcs_adhd_fit <- lavaan::sem(model_2, data = mcs_adhd_all_tip_gmm, se = "bootstrap",
+    missing = "fiml", bootstrap = 1000)
+serial_mcs_adhd_fit_sum <- lavaan::summary(serial_mcs_adhd_fit, standardized = TRUE, rsq = T,
+    fit = TRUE, ci = TRUE)
+serial_mcs_adhd_fit_ParEsts <- lavaan::parameterEstimates(serial_mcs_adhd_fit, boot.ci.type = "bca.simple",standardized = TRUE)
+serial_mcs_adhd_fit_sum
+serial_mcs_adhd_fit_ParEsts
+write.csv(serial_mcs_adhd_fit_ParEsts, file = "mcs_adhd_level2.csv")
+```
+
+
+```{r}
+
+adhd_model_2 <- "
+  # direct effects
+  diag.age ~ Sex + IQ + Eth + MBA + SES + dep + ttl + emo + con + hyp + peer + pro
+  
+  
+  # mediation paths
+  
+  ttl ~ IQ + dep + SES + MBA + Sex + Eth
+  emo ~ IQ + dep + SES + MBA + Sex + Eth
+  con ~ IQ + dep + SES + MBA + Sex + Eth
+  hyp ~ IQ + dep + SES + MBA + Sex+ Eth
+  peer ~ IQ + dep + SES + MBA + Sex+ Eth
+  pro ~ IQ + dep + SES + MBA + Sex+ Eth
+"
+
+adhd_fit_2 <- lavaan::sem(adhd_model_2, data = mcs_adhd_all_tip_gmm)
+
+adhd_model_3<- "
+  # direct effects
+  diag.age ~ Sex + IQ + Eth + MBA + SES + dep + ttl + emo + con + hyp + peer + pro
+  
+  
+  # mediation paths
+  ttl ~ IQ + dep + SES + MBA + Sex+ Eth
+  emo ~ IQ + dep + SES + MBA + Sex+ Eth
+  con ~ IQ + dep + SES + MBA + Sex+ Eth
+  hyp ~ IQ + dep + SES + MBA + Sex+ Eth
+  peer ~ IQ + dep + SES + MBA + Sex+ Eth
+  pro ~ IQ + dep + SES + MBA + Sex+ Eth
+  IQ ~ SES + MBA + dep + Sex+ Eth
+"
+
+adhd_fit_3 <- lavaan::sem(adhd_model_3, data = mcs_adhd_all_tip_gmm)
+
+adhd_model_4 <- "
+  # direct effects
+  diag.age ~ Sex + IQ + Eth + MBA + SES + dep + ttl + emo + con + hyp + peer + pro
+  
+  
+  # mediation paths
+  IQ ~ SES + MBA + dep + Sex+ Eth
+  MBA ~ SES + dep + Sex+ Eth
+  ttl ~ IQ + dep + SES + MBA + Sex+ Eth
+  emo ~ IQ + dep + SES + MBA + Sex+ Eth
+  con ~ IQ + dep + SES + MBA+ Sex+ Eth
+  hyp ~ IQ + dep + SES + MBA+ Sex+ Eth
+  peer ~ IQ + dep + SES + MBA+ Sex+ Eth
+  pro ~ IQ + dep + SES + MBA+ Sex+ Eth"
+
+adhd_fit_4 <- lavaan::sem(adhd_model_4, data = mcs_adhd_all_tip_gmm)
+# add a layer of ethnicity?
+
+summary(adhd_fit_1)
+summary(adhd_fit_2,standardized = TRUE, rsquare = TRUE)
+summary(adhd_fit_3,standardized = TRUE, rsquare = TRUE)
+summary(adhd_fit_4,standardized = TRUE, rsquare = TRUE)
+```
+
+```{r}
+adhd_12 <- anova(adhd_fit_1, adhd_fit_2)
+adhd_13 <- anova(adhd_fit_1, adhd_fit_3)
+adhd_14 <- anova(adhd_fit_1, adhd_fit_4)
+adhd_anova <- rbind(adhd_12,adhd_13,adhd_14)
+adhd_anova
+
+anova(adhd_fit_2,adhd_fit_3)
+nonnest2::vuongtest(adhd_fit_1,adhd_fit_2, nested=F)
+nonnest2::vuongtest(adhd_fit_2,adhd_fit_3, nested=TRUE)
+```

@@ -1,0 +1,384 @@
+---
+title: "River plot analysis"
+author: "Yira Zhang"
+date: "2024-06-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load data 
+```{r}
+
+# MCS-B
+mcsb_river <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcsb_river.csv")
+```
+
+```{r}
+library(ggalluvial)
+library(ggplot2)
+ggplot(data = mcsb_river,
+       aes(axis1 = con2, axis2 = con3)) +
+  geom_alluvium(aes(fill = con2)) +
+  geom_stratum() +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_minimal() +
+  ggtitle("River Plot of Group Transitions")
+```
+
+
+```{r}
+library(plotly)
+mcsb_river$con2_grp <- paste("con2",mcsb_river$con2)
+mcsb_river$con3_grp <- paste("con3",mcsb_river$con3)
+# Aggregate the data to get the counts of transitions
+agg_data <- as.data.frame(table(mcsb_river$con2_grp, mcsb_river$con3_grp))
+names(agg_data) <- c("con2", "con3", "Count")
+
+# Create a mapping for nodes
+nodes <- unique(c(as.character(agg_data$con2), as.character(agg_data$con3)))
+node_indices <- setNames(seq_along(nodes) - 1, nodes)
+
+# Prepare link data
+links <- data.frame(
+  source = node_indices[as.character(agg_data$con2)],
+  target = node_indices[as.character(agg_data$con3)],
+  value = agg_data$Count
+)
+custom_labels <- c("Group 1", "Group 2", "Group 1", "Group 2", "Group 3")
+custom_colors <- c("#33A02C", "#6A3D9A","#33A02C","#1F78B4", "#6A3D9A")
+
+# Create the plotly object
+fig_b_con <- plot_ly(
+  type = "sankey",
+  orientation = "h",
+  node = list(
+    label = custom_labels,
+    pad = 15,
+    thickness = 20,
+    line = list(color = "black", width = 0.5),
+    color = custom_colors
+  ),
+  link = list(
+    source = links$source,
+    target = links$target,
+    value = links$value
+  )
+)
+
+# Customize layout
+fig_b_con <- fig_b_con %>% layout(
+ 
+  font = list(
+    size = 12
+  )
+)
+
+# Plot the figure
+fig_b_con
+
+
+
+```
+
+
+
+```{r}
+library(plotly)
+mcsb_river$pro2_grp <- paste("pro2",mcsb_river$pro2)
+mcsb_river$pro3_grp <- paste("pro3",mcsb_river$pro3)
+# Aggregate the data to get the counts of transitions
+agg_data <- as.data.frame(table(mcsb_river$pro2_grp, mcsb_river$pro3_grp))
+names(agg_data) <- c("pro2", "pro3", "Count")
+
+# Create a mapping for nodes
+nodes <- unique(c(as.character(agg_data$pro2), as.character(agg_data$pro3)))
+node_indices <- setNames(seq_along(nodes) - 1, nodes)
+
+# Prepare link data
+links <- data.frame(
+  source = node_indices[as.character(agg_data$pro2)],
+  target = node_indices[as.character(agg_data$pro3)],
+  value = agg_data$Count
+)
+custom_labels <- c("Group 1", "Group 2", "Group 1", "Group 2", "Group 3")
+custom_colors <- c("#33A02C", "#6A3D9A","#33A02C", "#6A3D9A","#1F78B4")
+
+# Create the plotly object
+fig_b_pro <- plot_ly(
+  type = "sankey",
+  orientation = "h",
+  node = list(
+    label = custom_labels,
+    pad = 15,
+    thickness = 20,
+    line = list(color = "black", width = 0.5),
+    color = custom_colors
+  ),
+  link = list(
+    source = links$source,
+    target = links$target,
+    value = links$value
+  )
+)
+
+# Customize layout
+fig_b_pro <- fig_b_pro %>% layout(
+ 
+  font = list(
+    size = 12
+  )
+)
+
+# Plot the figure
+fig_b_pro
+
+
+
+```
+
+
+# Imputed 
+```{r}
+
+mcs_imp_river <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/MCS/mcs_imp_river.csv")
+```
+
+
+# Emotional
+```{r}
+
+mcs_imp_river$emo_grp <- paste("emo",mcs_imp_river$emo)
+mcs_imp_river$emo3_grp <- paste("emo3",mcs_imp_river$emo3)
+mcs_imp_river$emo4_grp <- paste("emo4",mcs_imp_river$emo4)
+# Aggregate the data to get the counts of transitions
+agg_data23 <- as.data.frame(table(mcs_imp_river$emo_grp,mcs_imp_river$emo3_grp))
+names(agg_data23) <- c("emo","emo3",  "Count")
+agg_data34 <- as.data.frame(table(mcs_imp_river$emo3_grp,mcs_imp_river$emo4_grp))
+names(agg_data34) <- c("emo3","emo4", "Count")
+# Create a mapping for nodes
+nodes <- unique(c(as.character(agg_data23$emo),as.character(agg_data23$emo3), as.character(agg_data34$emo4)))
+node_indices <- setNames(seq_along(nodes) - 1, nodes)
+
+# Prepare link data
+links_23 <- data.frame(
+  source = node_indices[as.character(agg_data23$emo)],
+  target = node_indices[as.character(agg_data23$emo3)],
+  value = agg_data23$Count
+)
+
+
+# Prepare link data for Condition2 -> Condition3
+links_34 <- data.frame(
+  source = node_indices[as.character(agg_data34$emo3)],
+  target = node_indices[as.character(agg_data34$emo4)],
+  value = agg_data34$Count
+)
+
+# Combine the links data
+links <- rbind(links_23, links_34)
+custom_labels <- c("Group 1", "Group 2", "Group 1", "Group 2", "Group 3","Group 1", "Group 2", "Group 3","Group 4")
+custom_colors <- c( "#33A02C","#6A3D9A","#1F78B4","#33A02C","#6A3D9A","#1F78B4","#33A02C","#6A3D9A","#FF7F00")
+
+# Create the plotly object with custom labels and colors
+fig_i_emo <- plot_ly(
+  type = "sankey",
+  orientation = "h",
+  node = list(
+    label = custom_labels,
+    pad = 15,
+    thickness = 20,
+    line = list(color = "black", width = 0.5),
+    color = custom_colors
+  ),
+  link = list(
+    source = links$source,
+    target = links$target,
+    value = links$value,
+    color = "rgba(0, 0, 0, 0.2)"  # semi-transparent black
+  )
+)
+
+# Customize layout
+fig_i_emo <- fig_i_emo %>% layout(
+  font = list(
+    size = 12
+  )
+)
+
+# Plot the figure
+fig_i_emo
+
+```
+
+# Conduct
+```{r}
+
+mcs_imp_river$con2_grp <- paste("con",mcs_imp_river$con)
+mcs_imp_river$con3_grp <- paste("con4",mcs_imp_river$con3)
+# Aggregate the data to get the counts of transitions
+agg_data <- as.data.frame(table(mcs_imp_river$con2_grp, mcs_imp_river$con3_grp))
+names(agg_data) <- c("con2", "con3", "Count")
+
+# Create a mapping for nodes
+nodes <- unique(c(as.character(agg_data$con2), as.character(agg_data$con3)))
+node_indices <- setNames(seq_along(nodes) - 1, nodes)
+
+# Prepare link data
+links <- data.frame(
+  source = node_indices[as.character(agg_data$con2)],
+  target = node_indices[as.character(agg_data$con3)],
+  value = agg_data$Count
+)
+custom_labels <- c("Group 1", "Group 2", "Group 1", "Group 2", "Group 3")
+custom_colors <- c("#33A02C", "#6A3D9A","#33A02C","#1F78B4","#6A3D9A")
+
+# Create the plotly object
+fig_i_con <- plot_ly(
+  type = "sankey",
+  orientation = "h",
+  node = list(
+    label = custom_labels,
+    pad = 15,
+    thickness = 20,
+    line = list(color = "black", width = 0.5),
+    color = custom_colors
+  ),
+  link = list(
+    source = links$source,
+    target = links$target,
+    value = links$value
+  )
+)
+
+# Customize layout
+fig_i_con <- fig_i_con %>% layout(
+  font = list(
+    size = 12
+  )
+)
+
+# Plot the figure
+fig_i_con
+
+
+
+```
+# Peer
+```{r}
+
+mcs_imp_river$peer2_grp <- paste("peer2",mcs_imp_river$peer)
+mcs_imp_river$peer3_grp <- paste("peer3",mcs_imp_river$peer3)
+# Aggregate the data to get the counts of transitions
+agg_data <- as.data.frame(table(mcs_imp_river$peer2_grp, mcs_imp_river$peer3_grp))
+names(agg_data) <- c("peer2", "peer3", "Count")
+
+# Create a mapping for nodes
+nodes <- unique(c(as.character(agg_data$peer2), as.character(agg_data$peer3)))
+node_indices <- setNames(seq_along(nodes) - 1, nodes)
+
+# Prepare link data
+links <- data.frame(
+  source = node_indices[as.character(agg_data$peer2)],
+  target = node_indices[as.character(agg_data$peer3)],
+  value = agg_data$Count
+)
+custom_labels <- c("Group 1", "Group 2", "Group 1", "Group 2", "Group 3")
+custom_colors <- c("#33A02C", "#6A3D9A","#33A02C","#1F78B4","#6A3D9A")
+
+# Create the plotly object
+fig_i_peer <- plot_ly(
+  type = "sankey",
+  orientation = "h",
+  node = list(
+    label = custom_labels,
+    pad = 15,
+    thickness = 20,
+    line = list(color = "black", width = 0.5),
+    color = custom_colors
+  ),
+  link = list(
+    source = links$source,
+    target = links$target,
+    value = links$value
+  )
+)
+
+# Customize layout
+fig_i_peer <- fig_i_peer %>% layout(
+  font = list(
+    size = 12
+  )
+)
+
+# Plot the figure
+fig_i_peer
+
+
+
+```
+# Prosocial
+```{r}
+
+mcs_imp_river$pro2_grp <- paste("pro2",mcs_imp_river$pro)
+mcs_imp_river$pro3_grp <- paste("pro3",mcs_imp_river$pro3)
+mcs_imp_river$pro4_grp <- paste("pro4",mcs_imp_river$pro4)
+# Aggregate the data to get the counts of transitions
+agg_data_23 <- as.data.frame(table(mcs_imp_river$pro2_grp, mcs_imp_river$pro3_grp))
+names(agg_data_23) <- c("pro2", "pro3", "Count")
+agg_data_34 <- as.data.frame(table(mcs_imp_river$pro3_grp, mcs_imp_river$pro4_grp))
+names(agg_data_34) <- c("pro3", "pro4", "Count")
+# Create a mapping for nodes
+nodes <- unique(c(as.character(agg_data_23$pro2),as.character(agg_data_23$pro3), as.character(agg_data_34$pro4)))
+node_indices <- setNames(seq_along(nodes) - 1, nodes)
+
+# Prepare link data
+links_23 <- data.frame(
+  source = node_indices[as.character(agg_data_23$pro2)],
+  target = node_indices[as.character(agg_data_23$pro3)],
+  value = agg_data_23$Count
+)
+links_34 <- data.frame(
+  source = node_indices[as.character(agg_data_34$pro3)],
+  target = node_indices[as.character(agg_data_34$pro4)],
+  value = agg_data_34$Count
+)
+
+links <- rbind(links_23,links_34)
+custom_labels <- c("Group 1", "Group 2", "Group 1", "Group 2", "Group 3","Group 1", "Group 2", "Group 3","Group 4")
+custom_colors <- c("#33A02C", "#6A3D9A","#1F78B4","#6A3D9A","#33A02C","#FF7F00","#33A02C","#6A3D9A","#1F78B4")
+
+# Create the plotly object
+fig_i_pro <- plot_ly(
+  type = "sankey",
+  orientation = "h",
+  node = list(
+    label = custom_labels,
+    pad = 15,
+    thickness = 20,
+    line = list(color = "black", width = 0.5),
+    color = custom_colors
+  ),
+  link = list(
+    source = links$source,
+    target = links$target,
+    value = links$value
+  )
+)
+
+# Customize layout
+fig_i_pro <- fig_i_pro %>% layout(
+  font = list(
+    size = 12
+  )
+)
+
+# Plot the figure
+fig_i_pro
+
+
+
+```
+
