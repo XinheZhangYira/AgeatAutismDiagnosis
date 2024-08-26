@@ -1,32 +1,23 @@
----
-title: "LSAC-B covariates"
-author: "Yira Zhang"
-date: "2023-10-12"
-output: html_document
----
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 
 ## Loading data
-```{r}
+
 library(dplyr)
-aus_b1 <- read_dta("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/General Release/Survey data/STATA/lsacgrb0.dta")
-aus_b2 <- read_dta("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/General Release/Survey data/STATA/lsacgrb2.dta")
-aus_b3 <- read_dta("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/General Release/Survey data/STATA/lsacgrb4.dta")
-aus_b4 <- read_dta("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/General Release/Survey data/STATA/lsacgrb6.dta")
-aus_b5 <- read_dta("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/General Release/Survey data/STATA/lsacgrb8.dta")
-aus_b6 <- read_dta("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/General Release/Survey data/STATA/lsacgrb10.dta")
-aus_b_no_autism <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/aus_b_no_autism.csv")
-aus_b_autism_early <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/aus_b_autism_early.csv")
-aus_b_autism_late <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/aus_b_autism_late.csv")
-```
+aus_b1 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb0.dta")
+aus_b2 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb2.dta")
+aus_b3 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb4.dta")
+aus_b4 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb6.dta")
+aus_b5 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb8.dta")
+aus_b6 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb10.dta")
+aus_b_no_autism <- read.csv("/Users/aus_b_no_autism.csv")
+aus_b_autism_early <- read.csv("/Users/aus_b_autism_early.csv")
+aus_b_autism_late <- read.csv("/Users/aus_b_autism_late.csv")
+
 
 
 
 # Cognitive abilities
-```{r}
+
 # wave 2: Drawn from the MacArthur-Bates Communicative Development Inventories-III shortened version [MCDI-III] (Fenson et al., 2007).: the higher the score the higher cognitive abilities indicated
 #aus_b2_autism <- aus_b2 %>% filter(hicid %in% c(aus_b_autism_early$hicid,aus_b_autism_late$hicid))
 aus_b2_iq <- aus_b2 %>% dplyr::select(hicid,bvocab,bgrammrk)
@@ -36,15 +27,15 @@ aus_b2_iq[aus_b2_iq <= 0] <- NA
 
 aus_b3_iq <- aus_b3 %>% dplyr::select(hicid,cppvt2,cwai2)
 aus_b3_iq[aus_b3_iq <= 0] <- NA
-```
-```{r}
+
+
 #aus_b4_autism <- aus_b4 %>% filter(hicid %in% c(aus_b_autism_early$hicid,aus_b_autism_late$hicid))
 #aus_b5_autism <- aus_b5 %>% filter(hicid %in% c(aus_b_autism_early$hicid,aus_b_autism_late$hicid))
 #aus_b6_autism <- aus_b6 %>% filter(hicid %in% c(aus_b_autism_early$hicid,aus_b_autism_late$hicid))
 #aus_b7_autism <- aus_b7 %>% filter(hicid %in% c(aus_b_autism_early$hicid,aus_b_autism_late$hicid))
 
-```
-```{r}
+
+
 aus_b4_iq <- aus_b4 %>% dplyr::select(hicid,dppvt2,dmatreas,dtlitr,dlc08a1a,dlc08a2a,dlc08a3a)
 aus_b4_iq[aus_b4_iq <= 0] <- NA
 aus_b4_iq_rc <- aus_b4_iq %>% mutate_at(vars(dlc08a1a,dlc08a2a,dlc08a3a),funs(6-.))
@@ -58,18 +49,18 @@ aus_b4_iq[aus_b4_iq <= 0] <- NA
 aus_b5_iq[aus_b5_iq <= 0] <- NA
 aus_b6_iq[aus_b6_iq <= 0] <- NA
 aus_b7_iq[aus_b7_iq <= 0] <- NA
-```
-```{r}
+
+
 library(corrplot)
 aus_b_iq_list <- list(aus_b2_iq,aus_b3_iq,aus_b4_iq_rc,aus_b5_iq,aus_b6_iq,aus_b7_iq)
 aus_b_iq_sum <- aus_b_iq_list %>% reduce(full_join, by= c('hicid')) 
 
 aus_b_iq_complete_case <- colSums(!is.na(aus_b_iq_sum))
 aus_b_iq_complete_case
-```
 
 
-```{r}
+
+
 cor(aus_b_iq_sum[2:26], use = "complete.obs")
 aus_b_iq_corrplot <- corrplot.mixed(cor(aus_b_iq_sum[2:26], use = "complete.obs"), upper = 'circle', 
                             lower = "number",
@@ -87,10 +78,10 @@ aus_b_iq_corrplot <- corrplot.mixed(cor(aus_b_iq_sum[2:26], use = "complete.obs"
 # flc08t3b,dmatreas:remove flc08t3b
 # flc08t3b,flc08t1b,flc08t2b,ftmathcr
 # gtlitcr glc08t1b : remove glc08t1b
-```
 
 
-```{r}
+
+
 columns_to_remove <- c("bgrammrk","dtlitr","etlitcr","dlc08a1a", "dlc08a2a","elc08t2b","elc08t3b","etmathcr","dmatreas","ftlitcr","flc08t2b", "flc08t3b","glc08t1b","ftmathcr")
 aus_b_iq_mcrm <- aus_b_iq_sum %>% dplyr::select(-all_of(columns_to_remove))
 aus_b_iq_corrplot_mcrm <- corrplot.mixed(cor(aus_b_iq_mcrm[2:12], use = "complete.obs"), upper = 'circle', 
@@ -108,11 +99,11 @@ aus_b_iq_corrplot_mcrm <- corrplot.mixed(cor(aus_b_iq_mcrm[2:12], use = "complet
 # flc08t3b,dmatreas:remove flc08t3b
 # flc08t3b,flc08t1b,flc08t2b,ftmathcr
 # gtlitcr glc08t1b : remove glc08t1b
-```
 
 
 
-```{r}
+
+
 aus_b_iq_mcrm_complete <- aus_b_iq_mcrm %>% na.omit
 
 
@@ -121,30 +112,30 @@ aus_b_summary_pc <- summary(aus_b_pc)
 aus_b_iq_pca_summary <- as.data.frame(aus_b_summary_pc$importance)
 #view(aus_b_summary_pc$rotation) # PC1 proportion of variance: 0.372680
 aus_b_iq_pc_score <- as.data.frame(aus_b_summary_pc$x)
-```
-```{r}
+
+
 aus_b_iq_pca <- cbind(aus_b_iq_mcrm_complete$hicid,aus_b_iq_pc_score)
 colnames(aus_b_iq_pca)[1]  <- "hicid"
 aus_b_iq_autism <- aus_b_iq_pca %>% filter(hicid %in% c(aus_b_autism_early$hicid,aus_b_autism_late$hicid))
 
-```
 
 
 
-```{r}
+
+
 aus_b_eth <- aus_b1 %>% select(hicid,zf02m1,zf09am,af11am,zf12am,zf09af,af11af,zf12af,af11m1)
-aus_country <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/Country.csv")
+aus_country <- read.csv("/Users/Country.csv")
 merged_df <- merge(aus_b_eth, aus_country, by.x = "zf09am", by.y = "Code", all.x = TRUE)
 merged_df <- merge(merged_df, aus_country, by.x = "zf09af", by.y = "Code", all.x = TRUE, suffixes = c("_mother", "_father"))
-```
 
-```{r}
+
+
 autism_country <- merged_df %>% filter(hicid %in% c(aus_b_autism_early$hicid, aus_b_autism_late$hicid))
 mother_country <- as.data.frame(table(merged_df$Country_father))
 father_country <- as.data.frame(table(merged_df$Country_mother))
-```
 
-```{r}
+
+
 aus_b_country_autism_early <- merged_df %>% filter(hicid %in% aus_b_autism_early$hicid)
 aus_b_country_autism_late <- merged_df %>% filter(hicid %in% aus_b_autism_late$hicid)
 early_mother_country <- as.data.frame(table(aus_b_country_autism_early$Country_father))
@@ -152,19 +143,19 @@ early_father_country <- as.data.frame(table(aus_b_country_autism_early$Country_m
 late_mother_country <- as.data.frame(table(aus_b_country_autism_late$Country_father))
 late_father_country <- as.data.frame(table(aus_b_country_autism_late$Country_mother))
 
-```
 
-```{r}
+
+
 # Eth: 1- Australian (not Indigenous);2-Anglo/European; 3-Visible Minority; 4-Indigenous (Aboriginal or Torres Strait Islander) 
 # https://acamh.onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1111%2Fjcpp.13410&file=jcpp13410-sup-0001-Supinfo.pdf 
 # https://acamh.onlinelibrary.wiley.com/doi/full/10.1111/jcpp.13410
 # based on where parents were born, what languages they speak at home/
 # top-down approach: one parent’s minority status ‘trumped’ the other parents’ majority status where applicable
-aus_b_eth <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/ethnicity_coding.csv")
-```
+aus_b_eth <- read.csv("/Users/ethnicity_coding.csv")
+
 
 # "age when giving birth"
-```{r}
+
 # There is no mother's age at giving birth question, but there is a question on mother's age last birthday at B1 and K1, which could reflect the distribution of mothers' ages in the cohort
 aus_b_ma <- aus_b1 %>% select(hicid, af03am)
 aus_b_eth_ma <- merge(aus_b_eth, aus_b_ma, by = "hicid")
@@ -172,10 +163,10 @@ aus_b_eth_ma <- merge(aus_b_eth, aus_b_ma, by = "hicid")
 
 #cf03cm (K cohort)
 
-```
+
 
 # SES
-```{r}
+
 aus_b1_ses <- aus_b1 %>% dplyr::select(hicid,afd08a1,afd08a3a,afd08b1,afd08b3a,apw02a1,apw02a2,apw02b1,apw02b2,afn05,anpeople)
 
 aus_b1_ses <- aus_b1_ses %>%
@@ -202,10 +193,10 @@ aus_b1_ses <- aus_b1_ses %>% mutate(afn_num = case_when(afn05 == 1 ~ 2400,
             afn05 == 99 ~ -1))
 aus_b1_ses <- aus_b1_ses %>% 
   mutate(afn_percap = afn_num/anpeople)
-```
 
 
-```{r}
+
+
 aus_b1_ses <- aus_b1_ses %>%
   mutate(p1_edu = ifelse(afd08a3a == 6|is.na(afd08a3a),
     ifelse(afd08a1 == 1, 6,
@@ -233,10 +224,10 @@ aus_b1_ses <- aus_b1_ses %>%
 # recoded (9-x) to let higher value represent higher qualification
 # 1- never attended school; 2- below high school; 3- completed high school; 4- certificate; 5- Advanced diploma/diploma; 6- Bachelor degree;7- Graduate diploma/certificate; 8- Postgraduate degree
 
-```
 
 
-```{r}
+
+
 
 aus_b1_ses <- aus_b1_ses %>% mutate(p1_work= case_when
                                     (apw02a1==1|apw02a2==1 ~ 1,
@@ -258,9 +249,9 @@ aus_b1_ses <- aus_b1_ses %>% mutate(p_work = ifelse(
 ))
 
 # 1 - both parents unemployed or out of labour force; 2- at least one parent employed
-```
 
-```{r}
+
+
 aus_b1_ses_final <- aus_b1_ses %>% dplyr::select(hicid,afn_percap,parent_edu,p_work)
 cor(aus_b1_ses_final[2:4], use = "complete.obs")
 aus_b1_ses_corrplot <- corrplot.mixed(cor(aus_b1_ses_final[2:4], use = "complete.obs"), upper = 'circle', 
@@ -270,8 +261,8 @@ aus_b1_ses_corrplot <- corrplot.mixed(cor(aus_b1_ses_final[2:4], use = "complete
                             tl.cex = 0.8,
                             addCoefasPercent = TRUE,
                             number.cex=0.8)
-```
-```{r}
+
+
 aus_b_ses_complete <- aus_b1_ses_final %>% na.omit
 
 
@@ -280,15 +271,15 @@ aus_b_ses_summary_pc <- summary(aus_b_ses_pc)
 aus_b_ses_pca_summary <- as.data.frame(aus_b_ses_summary_pc$importance)
 #view(aus_b_ses_summary_pc$rotation) # PC1 proportion of variance: 0.496000
 aus_b_ses_pc_score <- as.data.frame(aus_b_ses_summary_pc$x)
-```
-```{r}
+
+
 aus_b_ses_pca <- cbind(aus_b_ses_complete$hicid,aus_b_ses_pc_score)
 colnames(aus_b_ses_pca)[1]  <- "hicid"
 aus_b_ses_autism <- aus_b_ses_pca %>% filter(hicid %in% c(aus_b_autism_early$hicid,aus_b_autism_late$hicid))
-```
+
 
 # Deprivation
-```{r}
+
 
 # MCS: income, health, educationtraining, employment
 # Hardship and homelessness
@@ -305,10 +296,10 @@ aus_b_dep[aus_b_dep < 0] <- NA
 aus_b_dep <- aus_b_dep %>% mutate_at(vars(dhb21a1a1,dhb21a1b1,dhb21a1c1), funs(4-.))
 aus_b_dep$eho11p1[aus_b_dep$eho11p1 == 2] <- 0
 
-```
 
 
-```{r}
+
+
 
 
 cor(aus_b_dep[2:9], use = "complete.obs")
@@ -319,10 +310,10 @@ aus_b_dep_corrplot <- corrplot.mixed(cor(aus_b_dep[2:9], use = "complete.obs"), 
                             tl.cex = 0.8,
                             addCoefasPercent = TRUE,
                             number.cex=0.8)
-```
 
 
-```{r}
+
+
 aus_b_dep_complete <- aus_b1_ses %>% na.omit
 
 
@@ -331,20 +322,16 @@ aus_b_dep_summary_pc <- summary(aus_b_dep_pc)
 dep_pca_summary <- as.data.frame(aus_b_dep_summary_pc$importance)
 #view(aus_b_dep_summary_pc$rotation) # PC1 proportion of variance: 0.636090
 aus_b_dep_pc_score <- as.data.frame(aus_b_dep_summary_pc$x)
-```
-```{r}
+
+
 aus_b_dep_pca <- cbind(aus_b_dep_complete$hicid,aus_b_dep_pc_score)
 colnames(aus_b_dep_pca)[1]  <- "hicid"
 aus_b_dep_autism <- aus_b_dep_pca %>% filter(hicid %in% c(aus_b_autism_early$hicid,aus_b_autism_late$hicid))
-```
 
-```{r}
+
+
 aus_b_autism_tip <- merge(aus_b_eth_ma,aus_b_ses_autism, by = "hicid")
 
-# N = 116
-# IQ: 58, deprivation:6
-```
-```{r}
-write.csv(aus_b_autism_tip,file = "/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/aus_b_ses_eth.csv")
+write.csv(aus_b_autism_tip,file = "/Users/aus_b_ses_eth.csv")
 
-```
+
