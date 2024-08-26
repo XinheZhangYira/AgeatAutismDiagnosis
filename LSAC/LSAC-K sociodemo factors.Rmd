@@ -1,40 +1,29 @@
----
-title: "aus_k_covariates"
-author: "Yira Zhang"
-date: "2023-10-26"
-output: html_document
----
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+aus_k_no_autism <- read.csv("/Users/aus_k_no_autism.csv")
+aus_k_autism_early<- read.csv("/Users/aus_k_autism_early.csv")
+aus_k_autism_late <- read.csv("/Users/aus_k_autism_late.csv")
 
-```{r}
-aus_k_no_autism <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/aus_k_no_autism.csv")
-aus_k_autism_early<- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/aus_k_autism_early.csv")
-aus_k_autism_late <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/aus_k_autism_late.csv")
+aus_k1 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrk4.dta")
 
-aus_k1 <- read_dta("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/General Release/Survey data/STATA/lsacgrk4.dta")
-```
 
 # Ethnicity, mother's age
-```{r}
+
 aus_k_eth <- aus_k1 %>% dplyr::select(hicid,zf02m1,cf03cm,zf09cm,cf11cm,zf12cm,zf09cf,cf11cf,zf12cf)
-aus_country <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/Country.csv")
+aus_country <- read.csv("/Users//Country.csv")
 k_merged_df <- merge(aus_k_eth, aus_country, by.x = "zf09cm", by.y = "Code", all.x = TRUE)
 k_merged_df <- merge(k_merged_df, aus_country, by.x = "zf09cf", by.y = "Code", all.x = TRUE, suffixes = c("_mother", "_father"))
-```
 
-```{r}
+
+
 
 autism_k_country <- k_merged_df %>% filter(hicid %in% c(aus_k_autism_early$hicid, aus_k_autism_late$hicid))
 
-aus_k_eth <- read.csv("/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/k_ethnicity_coding.csv")
-```
+aus_k_eth <- read.csv("/Users//k_ethnicity_coding.csv")
+
 
 
 # SES
-```{r}
+
 aus_k1_ses <- aus_k1 %>% dplyr::select(hicid,cfd08a1,cfd08a3a,cfd08b1,cfd08b3a,cpw02a1,cpw02a2,cpw02b1,cpw02b2,cfn05,cnpeople)
 
 aus_k1_ses <- aus_k1_ses %>%
@@ -61,10 +50,10 @@ aus_k1_ses <- aus_k1_ses %>% mutate(cfn_num = case_when(cfn05 == 1 ~ 2400,
             cfn05 == 99 ~ -1))
 aus_k1_ses <- aus_k1_ses %>% 
   mutate(cfn_percap = cfn_num/cnpeople)
-```
 
 
-```{r}
+
+
 aus_k1_ses <- aus_k1_ses %>%
   mutate(p1_edu = ifelse(cfd08a3a == 6|is.na(cfd08a3a),
     ifelse(cfd08a1 == 1, 6,
@@ -92,10 +81,10 @@ aus_k1_ses <- aus_k1_ses %>%
 # recoded (9-x) to let higher value represent higher qualification
 # 1- never attended school; 2- below high school; 3- completed high school; 4- certificate; 5- Advanced diploma/diploma; 6- Bachelor degree;7- Graduate diploma/certificate; 8- Postgraduate degree
 
-```
 
 
-```{r}
+
+
 
 aus_k1_ses <- aus_k1_ses %>% mutate(p1_work= case_when
                                     (cpw02a1==1|cpw02a2==1 ~ 1,
@@ -117,9 +106,9 @@ aus_k1_ses <- aus_k1_ses %>% mutate(p_work = ifelse(
 ))
 
 # 1 - both parents unemployed or out of labour force; 2- at least one parent employed
-```
 
-```{r}
+
+
 aus_k1_ses_final <- aus_k1_ses %>% dplyr::select(hicid,cfn_percap,parent_edu,p_work)
 cor(aus_k1_ses_final[2:4], use = "complete.obs")
 aus_k1_ses_corrplot <- corrplot.mixed(cor(aus_k1_ses_final[2:4], use = "complete.obs"), upper = 'circle', 
@@ -129,10 +118,10 @@ aus_k1_ses_corrplot <- corrplot.mixed(cor(aus_k1_ses_final[2:4], use = "complete
                             tl.cex = 0.8,
                             addCoefasPercent = TRUE,
                             number.cex=0.8)
-```
 
 
-```{r}
+
+
 
 aus_k_ses_complete <- aus_k1_ses_final %>% na.omit
 
@@ -142,16 +131,16 @@ aus_k_ses_summary_pc <- summary(aus_k_ses_pc)
 aus_k_ses_pca_summary <- as.data.frame(aus_k_ses_summary_pc$importance)
 #view(aus_k_ses_summary_pc$rotation) # PC1 proportion of variance: 0.494120
 aus_k_ses_pc_score <- as.data.frame(aus_k_ses_summary_pc$x)
-```
-```{r}
+
+
 aus_k_ses_pca <- cbind(aus_k_ses_complete$hicid,aus_k_ses_pc_score)
 colnames(aus_k_ses_pca)[1]  <- "hicid"
 aus_k_ses_autism <- aus_k_ses_pca %>% filter(hicid %in% c(aus_k_autism_early$hicid,aus_k_autism_late$hicid))
-```
 
-```{r}
+
+
 aus_k_autism_tip <- merge(aus_k_eth,aus_k_ses_autism, by = "hicid")
-```
-```{r}
-write.csv(aus_k_autism_tip, file = "/Users/zhangxinhe/Documents/who recieves a diagnosis/Australia/aus_k_covariates.csv")
-```
+
+
+write.csv(aus_k_autism_tip, file = "/Users/aus_k_covariates.csv")
+
