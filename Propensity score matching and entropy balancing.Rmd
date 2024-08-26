@@ -1,16 +1,6 @@
----
-title: "Propensity score matching"
-author: "X.Zhang"
-date: "2024-06-24"
-output: html_document
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 
 ## Load data and packages
-```{r}
+
 library(readr)
 library(haven)
 library(purrr)
@@ -18,30 +8,28 @@ library(dplyr)
 library(MatchIt)
 library(tableone)
 # ALSPAC
-setwd("/Users/zhangxinherara/Documents/Propensity")
-alspac <- read_csv("/Users/zhangxinherara/Documents/Propensity/genetics_data/ALSPAC/B4244_Martin _2Feb2024.csv")
+
+alspac <- read_csv("/Users/specific_data.csv")
 
 # MCS   
 
-link <- read_table("/Users/zhangxinherara/Documents/Propensity/genetics_data/MCS/GDAC_2023_05_WARRIER_mcs_genoID_projectID_link.txt")
-names(link)[3:4] <-c("WARRIER_FID","WARRIER_SID") 
+link <- read_table("/Users/*****(researcher unique)_mcs_genoID_projectID_link.txt")
+names(link)[3:4] <-c("****_FID","****_SID") 
 
-mcs_cog_ass <- read_sav("/Users/zhangxinherara/Documents/Propensity/genetics_data/MCS/GDAC_2023_05_WARRIER_mcs_cm_structure_pheno_data_2023-08-16_16-22-56.sav")
-mcs_cog_ass <- merge(link,mcs_cog_ass, by = c("WARRIER_SID","WARRIER_FID"))
-mcs_hh <- read_sav("genetics_data/MCS/GDAC_2023_05_WARRIER_mcs_data_struct_fam_imd_2023-08-16_16-46-33.sav")
-mcs_family <- read_sav("/Users/zhangxinherara/Documents/Propensity/genetics_data/MCS/GDAC_2023_05_WARRIER_mcs_family_structure_pheno_data_2023-08-16_16-22-56.sav", encoding = "latin1")
-mcs_parent_cm <- read_sav("/Users/zhangxinherara/Documents/Propensity/genetics_data/MCS/GDAC_2023_05_WARRIER_mcs_parent_cm_structure_pheno_data_2023-08-16_16-22-56.sav",encoding = "latin1")
-mcs_parent_interview <- read_sav("/Users/zhangxinherara/Documents/Propensity/genetics_data/MCS/GDAC_2023_05_WARRIER_mcs_parent_structure_pheno_data_2023-08-16_16-22-56.sav",encoding = "latin1")
-mcs_parent_interview <- merge(link,mcs_parent_interview,by = c("WARRIER_SID","WARRIER_FID") )
+mcs_cog_ass <- read_sav("/Users/zhangxinherara/Documents/Propensity/genetics_data/MCS/GDAC_2023_05_****_mcs_cm_structure_pheno_data_2023-08-16_16-22-56.sav")
+mcs_cog_ass <- merge(link,mcs_cog_ass, by = c("****_SID","****_FID"))
+mcs_hh <- read_sav("genetics_data/MCS/GDAC_2023_05_****_mcs_data_struct_fam_imd_2023-08-16_16-46-33.sav")
+mcs_family <- read_sav("/Users/zhangxinherara/Documents/Propensity/genetics_data/MCS/GDAC_2023_05_****_mcs_family_structure_pheno_data_2023-08-16_16-22-56.sav", encoding = "latin1")
+mcs_parent_cm <- read_sav("/Users/zhangxinherara/Documents/Propensity/genetics_data/MCS/GDAC_2023_05_****_mcs_parent_cm_structure_pheno_data_2023-08-16_16-22-56.sav",encoding = "latin1")
+mcs_parent_interview <- read_sav("/Users/zhangxinherara/Documents/Propensity/genetics_data/MCS/GDAC_2023_05_****_mcs_parent_structure_pheno_data_2023-08-16_16-22-56.sav",encoding = "latin1")
+mcs_parent_interview <- merge(link,mcs_parent_interview,by = c("****_SID","****_FID") )
 mcs_demo <- read_csv("/Users/zhangxinherara/Documents/Propensity/genetics_data/MCS/EGA_mcs_basic_demographics_v0003.csv")
 mcs_demo <- merge(link, mcs_demo, by = c("geno_fid","geno_sid"))
 
 mcs_demo_cm <- mcs_demo[mcs_demo$mfc == "C",]
 
-```
 
 
-```{r}
 # Extract variable info
 info_mcs_cog_ass <- data.frame(
   Variable = names(mcs_cog_ass),
@@ -79,11 +67,11 @@ data_frames <- mget(ls(pattern = "^info_"))
 # Concatenate them into one data frame
 combined_mcs_info <- bind_rows(data_frames)
 
-```
+
 
 # Extract demographnic variables for matching
 ## ALSPAC
-```{r}
+
 # sex, age, maternal education, maternal age at birth, English not the only language exposed to
 # mz028b: maternal age at birth
 
@@ -117,27 +105,27 @@ names(alspac_ps) <- c("cidB4244","qlet","sex","mad","mother_highest_edu_raw","ed
 alspac_ps_complete <- alspac_ps %>% na.omit()
 alspac_ps_complete$IID <- paste(alspac_ps_complete$cidB4244,alspac_ps_complete$qlet,sep = "")
 alspac_ps_sex_mum <- alspac_ps_complete %>% select(IID, sex, mad,edu_match)
-```
+
 
 ## MCS
-```{r}
+
 # Exposure to language not English
-EPRASN0M,EPRSEX0P,FPRSEN0Q,GPSDQTRANS1
+#EPRASN0M,EPRSEX0P,FPRSEN0Q,GPSDQTRANS1
 
 # Maternal age at delivery XDDRES00 == 1 Natural mother interview
-ADDAGB00,BDDAGB00
+#ADDAGB00,BDDAGB00
 
 # S6 DV Respondent NVQ Highest Level (all sweeps)
-FDNVQ00
+#FDNVQ00
 
 # Mother's highest educational qualification : first sweep used here as same data were recorded during pregnancy in LASPAC
 # NVQ comparisons https://www.cityandguilds.com/qualifications-and-apprenticeships/qualifications-explained/qualification-comparisons 
 # GCSE 1,2; A-level 3; degree and above 4
-ADACAQ00
-```
+#ADACAQ00
 
-```{r}
-mcs_ps <- mcs_parent_interview %>% filter(ADDRES00 == 1 & BDDRES00 == 1) %>% select(geno_fid,geno_sid,WARRIER_SID,WARRIER_FID,ADACAQ00,ADDAGB00,BDDAGB00) 
+
+
+mcs_ps <- mcs_parent_interview %>% filter(ADDRES00 == 1 & BDDRES00 == 1) %>% select(geno_fid,geno_sid,****_SID,****_FID,ADACAQ00,ADDAGB00,BDDAGB00) 
 mcs_ps[5:7] <- lapply(mcs_ps[5:7], as.numeric)
 mcs_ps$ADACAQ00 <-ifelse(mcs_ps$ADACAQ00 == 96, 0, mcs_ps$ADACAQ00)
 
@@ -152,30 +140,30 @@ mcs_ps <- mcs_ps %>% mutate(edu_match = case_when(
 # 0 = no qualification (use to be 96, "none of these"); 1 = GCSE or below; 2 = A-Level;3 = degree or above ; NA includes overseas qualification only, as such info was not recorded in ALSPAC
 table(mcs_ps$ADACAQ00)
 table(mcs_ps$edu_match)
-mcs_ps_language <- mcs_parent_cm %>% select(WARRIER_SID,WARRIER_FID,EPRASN0M,EPRSEX0P,FPRSEN0Q, GPSDQTRANS1) 
+mcs_ps_language <- mcs_parent_cm %>% select(****_SID,****_FID,EPRASN0M,EPRSEX0P,FPRSEN0Q, GPSDQTRANS1) 
 mcs_ps_language[3:6] <- lapply(mcs_ps_language[3:6], as.numeric)
 # summary(mcs_ps_language)
 mcs_ps_language$non_eng_exposure <- ifelse(mcs_ps_language$EPRSEX0P== 1|mcs_ps_language$GPSDQTRANS1 == 2, 1,0)
 # View(mcs_ps)
-mcs_sex <- mcs_demo_cm %>% select(geno_fid,geno_sid,WARRIER_FID,WARRIER_SID,pnum,singleton_twin,sex)
+mcs_sex <- mcs_demo_cm %>% select(geno_fid,geno_sid,****_FID,****_SID,pnum,singleton_twin,sex)
 
-mcs_ps_sex_mum_raw <- merge(mcs_ps,mcs_sex,by = c("geno_fid","WARRIER_FID"))
+mcs_ps_sex_mum_raw <- merge(mcs_ps,mcs_sex,by = c("geno_fid","****_FID"))
 
-mcs_ps_sex_mum_complete <- mcs_ps_sex_mum_raw %>% select(geno_fid,WARRIER_FID,ADDAGB00,edu_match,pnum,sex,WARRIER_SID.x,WARRIER_SID.y,geno_sid.x,geno_sid.y) %>% na.omit()
-setnames(mcs_ps_sex_mum_complete,"WARRIER_SID.x","WARRIER_SID_p")
-setnames(mcs_ps_sex_mum_complete,"WARRIER_SID.y","WARRIER_SID_c")
+mcs_ps_sex_mum_complete <- mcs_ps_sex_mum_raw %>% select(geno_fid,****_FID,ADDAGB00,edu_match,pnum,sex,****_SID.x,****_SID.y,geno_sid.x,geno_sid.y) %>% na.omit()
+setnames(mcs_ps_sex_mum_complete,"****_SID.x","****_SID_p")
+setnames(mcs_ps_sex_mum_complete,"****_SID.y","****_SID_c")
 setnames(mcs_ps_sex_mum_complete,"geno_sid.x","geno_sid_p")
 setnames(mcs_ps_sex_mum_complete,"geno_sid.y","geno_sid_c")
 mcs_ps_sex_mum_complete$IID <- paste(mcs_ps_sex_mum_complete$geno_fid,mcs_ps_sex_mum_complete$pnum, sep = "_")
-mcs_ps_sex_mum_complete$ID_merge <- paste(mcs_ps_sex_mum_complete$WARRIER_FID,mcs_ps_sex_mum_complete$pnum, sep = "_")
+mcs_ps_sex_mum_complete$ID_merge <- paste(mcs_ps_sex_mum_complete$****_FID,mcs_ps_sex_mum_complete$pnum, sep = "_")
 # here as pnum is for each child, the ID_merge is unique for each child
 mcs_ps_sex_mum <- mcs_ps_sex_mum_complete %>% select(IID,sex,ADDAGB00,edu_match,ID_merge)
 names(mcs_ps_sex_mum)[3] <- "mad"
-```
+
 
 ## Merge for matching
 # Sex, maternal age at delivery, and mother's highest educational qualifictaion
-```{r}
+
 alspac_ps_sex_mum$group <- 0
 mcs_ps_sex_mum$group <- 1
 ps_match_sex_mum <- rbind(alspac_ps_sex_mum,mcs_ps_sex_mum)
@@ -188,8 +176,8 @@ vars <- c("sex", "mad", "edu_match")
 # Create the summary table
 pre_table_one <- CreateTableOne(vars = vars, strata = "group", data = ps_match_sex_mum, includeNA = T)
 print(pre_table_one)
-```
-```{r}
+
+
 
 propensity_model <- glm(group ~ sex + mad + edu_match, data = ps_match_sex_mum, family = binomial)
 summary(propensity_model)
@@ -211,18 +199,18 @@ love.plot(bal.tab(matched_data, m.threshold=0.1),stat = "mean.diffs",grid=TRUE,s
 # here we can see the two samples are not well-balanced. 
 # so, I will recode the educational qualification in MCS. as in ALSPAC no mother reported no qualification/below CSE
 
-```
 
 
-```{r}
+
+
 
 re_mcs_ps_sex_mum <- mcs_ps_sex_mum
 # combined 0 and 1 as 1 in MCS educational qualification
 re_mcs_ps_sex_mum$edu_match <-  ifelse(re_mcs_ps_sex_mum$edu_match == 0, 1, re_mcs_ps_sex_mum$edu_match)
 
-```
 
-```{r}
+
+
 
 re_mcs_ps_sex_mum$group <- 1
 re_ps_match_sex_mum <- rbind(alspac_ps_sex_mum,re_mcs_ps_sex_mum)
@@ -254,10 +242,10 @@ love.plot(bal.tab(rematched_data, m.threshold=0.1),stat = "mean.diffs",grid=TRUE
 
 # this time better matched
 
-```
 
+==============================================
+## Entropy balancing
 
-```{r}
 library(ebal)
 
 
@@ -285,10 +273,10 @@ weights[ps_match_sex_mum$group == 0] <- ebalance_result$w  # Apply calculated we
 
 summary(weights)
 pb_match_sex_mum <- cbind(ps_match_sex_mum,weights)
-```
+
 
 # Get matched ALSPAC original ID 
-```{r}
+
 alspac_ps_matched <- inner_join(alspac_ps_complete[,c(1:2,7)],rematched_sex_mum_alspac, by = "IID")
 alspac_ps_matched$group <- NULL
 alspac_eb_weighted <- inner_join(alspac_ps_complete[,c(1,2,7)],pb_match_sex_mum, by = "IID")
@@ -296,4 +284,4 @@ alspac_eb_weighted$group <- NULL
 
 mcs_ps_sex_mum <- inner_join(mcs_ps_sex_mum_complete[,c(1,2,11)],mcs_ps_sex_mum, by = "IID")
 # write.csv to store these
-```
+
