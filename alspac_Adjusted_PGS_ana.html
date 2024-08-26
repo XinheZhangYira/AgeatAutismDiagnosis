@@ -1,0 +1,421 @@
+## Entropy balanced ALSPAC PGS analysis
+#Merging all files
+alspac_ps_matched &lt;- read.csv(&quot;/Users/zhangxinherara/Documents/Propensity/genetics_data/ALSPAC/alspac_ps_matched.csv&quot;)
+setnames(alspac_ps_matched,&quot;IID&quot;,&quot;ID&quot;)
+alspac_eb_weighted &lt;- read.csv(&quot;/Users/zhangxinherara/Documents/Propensity/genetics_data/ALSPAC/alspac_eb_weighted.csv&quot;)
+setnames(alspac_eb_weighted,&quot;IID&quot;,&quot;ID&quot;)</code></pre>
+<pre class="r"><code>pheno = read.csv(&quot;/Users/zhangxinherara/Documents/Propensity/genetics_data/ALSPAC/B4244_Martin _2Feb2024.csv&quot;)
+pheno$ID = paste0(pheno$cidB4244, pheno$qlet)
+setnames(pheno, &quot;kz021&quot;, &quot;sex&quot;)
+pheno_ps &lt;- pheno %&gt;% filter(ID %in% alspac_ps_matched$ID)
+pheno_eb &lt;- merge(alspac_eb_weighted[,c(4,8)],pheno, by = &quot;ID&quot;)
+
+id = read.csv(&quot;/Users/zhangxinherara/Documents/Propensity/genetics_data/ALSPAC/OmicsIDs_B4244_21Feb24.csv&quot;)
+id$ID = paste0(id$cidB4244, id$qlet)
+id = id[,c(&quot;ID&quot;, &quot;gi_hrc_g0m_g1&quot;)]
+setnames(id, &quot;gi_hrc_g0m_g1&quot;, &quot;IID&quot;)
+
+PCs = fread(&quot;/Users/zhangxinherara/Documents/Propensity/genetics_data/ALSPAC/ALSPAC_PCsforGWAS_european.txt&quot;)
+setnames(PCs, &quot;Sample_name&quot;, &quot;IID&quot;)
+
+over10 = fread(&quot;/Users/zhangxinherara/Documents/Propensity/genetics_data/ALSPAC/autism_iPSYCH_over10_finalscore.sscore&quot;)
+over10 = over10[,c(&quot;IID&quot;, &quot;SCORE1_AVG&quot;)]
+setnames(over10, &quot;SCORE1_AVG&quot;, &quot;over10_PGS&quot;)
+
+under11 = fread(&quot;/Users/zhangxinherara/Documents/Propensity/genetics_data/ALSPAC/autism_iPSYCH_under11_finalscore.sscore&quot;)
+under11 = under11[,c(&quot;IID&quot;, &quot;SCORE1_AVG&quot;)]
+setnames(under11, &quot;SCORE1_AVG&quot;, &quot;under11_PGS&quot;)</code></pre>
+<pre class="r"><code>df_list &lt;- list(over10, under11, PCs)
+
+merged = df_list %&gt;% reduce(full_join, by=&#39;IID&#39;) # 7841 children, 12416 adults/[parents]
+
+merged$IID &lt;- substring(merged$IID, 1, nchar(merged$IID) - 1)
+
+merged = merge(merged, id, by = &quot;IID&quot;)
+merged &lt;- unique(merged, by = &quot;IID&quot;)</code></pre>
+<div id="using-propensity-score-matched-balance-checked-data" class="section level2">
+<h2>Using propensity score matched (balance checked) data</h2>
+<pre class="r"><code>SDQ_age7 = pheno_ps[,c(&quot;ID&quot;, &quot;sex&quot;, &quot;kq348a&quot;, &quot;kq348b&quot;, &quot;kq348c&quot;,   &quot;kq348d&quot;,   &quot;kq348e&quot;,   &quot;kq348f&quot;)]
+setnames(SDQ_age7, old = c(&quot;kq348a&quot;, &quot;kq348b&quot;,  &quot;kq348c&quot;,   &quot;kq348d&quot;,   &quot;kq348e&quot;,   &quot;kq348f&quot;), new = c(&quot;prosocial&quot;, &quot;hyperactivity&quot;, &quot;emotional&quot;, &quot;conduct&quot;, &quot;peer&quot;, &quot;total&quot;))
+
+SDQ_age10 = pheno_ps[,c(&quot;ID&quot;, &quot;sex&quot;, &quot;ku705b&quot;, &quot;ku706b&quot;,    &quot;ku707b&quot;,   &quot;ku708b&quot;,   &quot;ku709b&quot;,   &quot;ku710b&quot;)]
+setnames(SDQ_age10, old = c(&quot;ku705b&quot;, &quot;ku706b&quot;, &quot;ku707b&quot;,   &quot;ku708b&quot;,   &quot;ku709b&quot;,   &quot;ku710b&quot;), new = c(&quot;prosocial&quot;, &quot;hyperactivity&quot;, &quot;emotional&quot;, &quot;conduct&quot;, &quot;peer&quot;, &quot;total&quot;))
+
+SDQ_age12 = pheno_ps[,c(&quot;ID&quot;, &quot;sex&quot;, &quot;kw6600b&quot;, &quot;kw6601b&quot;,  &quot;kw6602b&quot;,  &quot;kw6603b&quot;,  &quot;kw6604b&quot;,  &quot;kw6605b&quot;)]
+setnames(SDQ_age12, old = c(&quot;kw6600b&quot;, &quot;kw6601b&quot;,   &quot;kw6602b&quot;,  &quot;kw6603b&quot;,  &quot;kw6604b&quot;,  &quot;kw6605b&quot;), new = c(&quot;prosocial&quot;, &quot;hyperactivity&quot;, &quot;emotional&quot;, &quot;conduct&quot;, &quot;peer&quot;, &quot;total&quot;))
+
+SDQ_age13 = pheno_ps[,c(&quot;ID&quot;, &quot;sex&quot;, &quot;ta7025a&quot;, &quot;ta7025b&quot;,  &quot;ta7025c&quot;,  &quot;ta7025d&quot;,  &quot;ta7025e&quot;,  &quot;ta7025f&quot;)]
+setnames(SDQ_age13, old = c(&quot;ta7025a&quot;, &quot;ta7025b&quot;,   &quot;ta7025c&quot;,  &quot;ta7025d&quot;,  &quot;ta7025e&quot;,  &quot;ta7025f&quot;), new = c( &quot;emotional&quot;, &quot;conduct&quot;, &quot;hyperactivity&quot;, &quot;peer&quot;, &quot;prosocial&quot;,  &quot;total&quot;))
+
+SDQ_age17 = pheno_ps[,c(&quot;ID&quot;, &quot;sex&quot;, &quot;tc4025a&quot;, &quot;tc4025b&quot;,  &quot;tc4025c&quot;,  &quot;tc4025d&quot;,  &quot;tc4025e&quot;,  &quot;tc4025f&quot;)]
+setnames(SDQ_age17, old = c(&quot;tc4025a&quot;, &quot;tc4025b&quot;,   &quot;tc4025c&quot;,  &quot;tc4025d&quot;,  &quot;tc4025e&quot;,  &quot;tc4025f&quot;), new = c( &quot;emotional&quot;, &quot;conduct&quot;, &quot;hyperactivity&quot;, &quot;peer&quot;, &quot;prosocial&quot;,  &quot;total&quot;))
+
+
+
+data_frames &lt;- list(SDQ_age7, SDQ_age10, SDQ_age12, SDQ_age13, SDQ_age17)
+
+SDQ_age7[SDQ_age7&lt;0]=NA
+SDQ_age10[SDQ_age10&lt;0]=NA
+SDQ_age12[SDQ_age12&lt;0]=NA
+SDQ_age13[SDQ_age13&lt;0]=NA
+SDQ_age17[SDQ_age17&lt;0]=NA
+
+
+merged1 = merge(merged, SDQ_age7, by = &quot;ID&quot;)
+merged2 = merge(merged, SDQ_age10, by = &quot;ID&quot;)
+merged3 = merge(merged, SDQ_age12, by = &quot;ID&quot;)
+merged4 = merge(merged, SDQ_age13, by = &quot;ID&quot;)
+merged5 = merge(merged, SDQ_age17, by = &quot;ID&quot;)
+
+
+merged1$period = 7
+merged2$period = 10
+merged3$period = 12
+merged4$period = 13
+merged5$period = 17
+  
+  
+merged_multilevel = bind_rows(merged1, merged2, merged3, merged4, merged5)
+merged_multilevel$period = as.numeric(as.character(merged_multilevel$period))
+
+
+lmer(scale(emotional) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = merged_multilevel)
+
+  
+lmer(scale(conduct) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = merged_multilevel)</code></pre>
+
+  
+lmer(scale(hyperactivity) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = merged_multilevel)</code></pre>
+
+  
+lmer(scale(peer) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = merged_multilevel)</code></pre>
+
+  
+lmer(scale(prosocial) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = merged_multilevel)</code></pre>
+
+  
+  
+  
+lmer(scale(total) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = merged_multilevel)</code></pre>
+
+
+
+  
+results_over10 = NULL
+results_under11 = NULL
+Samplesize = NULL
+
+for(i in list1){
+  results_all = summary(lm(scale(merged1[[i]]) ~ scale(over10_PGS) + scale(under11_PGS) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = merged1))
+  results_over10 = rbind(results_over10, cbind(i, t(results_all$coefficients[2,])))
+  results_under11 = rbind(results_under11, cbind(i, t(results_all$coefficients[3,])))
+  dim =  nrow(merged1) - length(results_all$na.action)
+  Samplesize = rbind(Samplesize, dim)
+  
+}
+print(results_all)
+  
+  
+  
+  
+  
+for(i in list1){
+  results_all = summary(lm(scale(merged2[[i]]) ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = merged2))
+  results_over10 = rbind(results_over10, cbind(i, t(results_all$coefficients[2,])))
+  results_under11 = rbind(results_under11, cbind(i, t(results_all$coefficients[3,])))
+  dim =  nrow(merged1) - length(results_all$na.action)
+  Samplesize = rbind(Samplesize, dim)
+  
+}
+print(results_all)
+  
+  
+  
+  
+  
+  
+for(i in list1){
+  results_all = summary(lm(scale(merged3[[i]]) ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = merged3))
+  results_over10 = rbind(results_over10, cbind(i, t(results_all$coefficients[2,])))
+  results_under11 = rbind(results_under11, cbind(i, t(results_all$coefficients[3,])))
+  dim =  nrow(merged1) - length(results_all$na.action)
+  Samplesize = rbind(Samplesize, dim)
+  
+}
+print(results_all)
+  
+  
+  
+  
+  
+  
+  
+for(i in list1){
+  results_all = summary(lm(scale(merged4[[i]]) ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = merged4))
+  results_over10 = rbind(results_over10, cbind(i, t(results_all$coefficients[2,])))
+  results_under11 = rbind(results_under11, cbind(i, t(results_all$coefficients[3,])))
+  dim =  nrow(merged1) - length(results_all$na.action)
+  Samplesize = rbind(Samplesize, dim)
+  
+}
+print(results_all)
+  
+  
+  
+  
+  
+  
+for(i in list1){
+  results_all = summary(lm(scale(merged5[[i]]) ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = merged5))
+  results_over10 = rbind(results_over10, cbind(i, t(results_all$coefficients[2,])))
+  results_under11 = rbind(results_under11, cbind(i, t(results_all$coefficients[3,])))
+  dim =  nrow(merged1) - length(results_all$na.action)
+  Samplesize = rbind(Samplesize, dim)
+  
+}
+print(results_all)
+
+  
+autism$ku360 =ifelse(autism$ku360 ==1, 0, autism$ku360)
+autism$ku360 =ifelse(autism$ku360 ==2, 1, autism$ku360)
+merged_autism = merge(merged, autism, by = &quot;ID&quot;)
+
+
+results_all = summary(glm(ku360 ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = merged_autism, family = &quot;binomial&quot;))
+
+  
+  
+results_all = summary(lm(YPH1270 ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = merged_autism))
+print(results_all)
+  
+  
+  
+merged_autism$suspect = ifelse(merged_autism$YPH1270 ==2, 1, NA)
+merged_autism$suspect = ifelse(merged_autism$YPH1270 ==3, 0, merged_autism$suspect)
+
+
+merged_autism$autism_28 = ifelse(merged_autism$YPH1270 ==1, 1, NA)
+merged_autism$autism_28 = ifelse(merged_autism$YPH1270 ==3, 0, merged_autism$autism_28)
+
+
+scdc = pheno_ps[,c(&quot;ID&quot;, &quot;sex&quot;,  &quot;kr554b&quot;, &quot;kg622a&quot;, &quot;kg622b&quot;,&quot;kg623a&quot;, &quot;kg623b&quot;, &quot;kl722a&quot;, &quot;kl722b&quot;, &quot;kn6022a&quot;, &quot;kn6022b&quot;, &quot;FKEP1015&quot;, &quot;ku503a&quot;, &quot;ku504a&quot;, &quot;ku505a&quot;, &quot;ku506a&quot;, &quot;ku507a&quot;, &quot;ku508a&quot;, &quot;ku509a&quot;, &quot;ku510a&quot;, &quot;kc814&quot; )]
+scdc[scdc&lt;0]=NA
+
+merged_scdc = merge(merged, scdc, by = &quot;ID&quot;)
+
+summary(lm(scale(kc814) ~ scale(under11_PGS) + scale(over10_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = merged_scdc))
+  
+  
+  
+  
+  
+gesture = pheno_ps[,c(&quot;ID&quot;, &quot;sex&quot;,&quot;kc958&quot;, &quot;kc959&quot;,&quot;kc960&quot;, &quot;kc961&quot;, &quot;kc962&quot;, &quot;kc963&quot;, &quot;kc964&quot;, &quot;kc965&quot;, &quot;kc966&quot;, &quot;kc967&quot;)]
+gesture[gesture&lt;0]=NA
+gesture$total = rowSums(gesture[ , c(3:12)], na.rm=TRUE)
+gesture[gesture&lt;1]=NA
+
+
+merged_gesture = merge(merged, gesture, by = &quot;ID&quot;)
+summary(lm(scale(total) ~ scale(under11_PGS) + scale(over10_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = merged_gesture))
+  
+  
+behav = pheno_ps[,c(&quot;ID&quot;, &quot;sex&quot;, &quot;kg900&quot;, &quot;kg901&quot;, &quot;kg902&quot;, &quot;kg903&quot;, &quot;kg904&quot;)]
+
+behav[behav&lt;0]=NA
+
+merged_behav = merge(merged, behav, by = &quot;ID&quot;)
+summary(lm(scale(kg904) ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = merged_behav))
+
+  
+  
+eb_SDQ_age7 = pheno_eb[,c(&quot;ID&quot;,&quot;weights&quot;, &quot;sex&quot;, &quot;kq348a&quot;, &quot;kq348b&quot;,    &quot;kq348c&quot;,   &quot;kq348d&quot;,   &quot;kq348e&quot;,   &quot;kq348f&quot;)]
+setnames(eb_SDQ_age7, old = c(&quot;kq348a&quot;, &quot;kq348b&quot;,   &quot;kq348c&quot;,   &quot;kq348d&quot;,   &quot;kq348e&quot;,   &quot;kq348f&quot;), new = c(&quot;prosocial&quot;, &quot;hyperactivity&quot;, &quot;emotional&quot;, &quot;conduct&quot;, &quot;peer&quot;, &quot;total&quot;))
+
+eb_SDQ_age10 = pheno_eb[,c(&quot;ID&quot;,&quot;weights&quot;,&quot;sex&quot;, &quot;ku705b&quot;, &quot;ku706b&quot;,    &quot;ku707b&quot;,   &quot;ku708b&quot;,   &quot;ku709b&quot;,   &quot;ku710b&quot;)]
+setnames(eb_SDQ_age10, old = c(&quot;ku705b&quot;, &quot;ku706b&quot;,  &quot;ku707b&quot;,   &quot;ku708b&quot;,   &quot;ku709b&quot;,   &quot;ku710b&quot;), new = c(&quot;prosocial&quot;, &quot;hyperactivity&quot;, &quot;emotional&quot;, &quot;conduct&quot;, &quot;peer&quot;, &quot;total&quot;))
+
+eb_SDQ_age12 = pheno_eb[,c(&quot;ID&quot;,&quot;weights&quot;,&quot;sex&quot;, &quot;kw6600b&quot;, &quot;kw6601b&quot;,  &quot;kw6602b&quot;,  &quot;kw6603b&quot;,  &quot;kw6604b&quot;,  &quot;kw6605b&quot;)]
+setnames(eb_SDQ_age12, old = c(&quot;kw6600b&quot;, &quot;kw6601b&quot;,    &quot;kw6602b&quot;,  &quot;kw6603b&quot;,  &quot;kw6604b&quot;,  &quot;kw6605b&quot;), new = c(&quot;prosocial&quot;, &quot;hyperactivity&quot;, &quot;emotional&quot;, &quot;conduct&quot;, &quot;peer&quot;, &quot;total&quot;))
+
+eb_SDQ_age13 = pheno_eb[,c(&quot;ID&quot;,&quot;weights&quot;,&quot;sex&quot;, &quot;ta7025a&quot;, &quot;ta7025b&quot;,  &quot;ta7025c&quot;,  &quot;ta7025d&quot;,  &quot;ta7025e&quot;,  &quot;ta7025f&quot;)]
+setnames(eb_SDQ_age13, old = c(&quot;ta7025a&quot;, &quot;ta7025b&quot;,    &quot;ta7025c&quot;,  &quot;ta7025d&quot;,  &quot;ta7025e&quot;,  &quot;ta7025f&quot;), new = c( &quot;emotional&quot;, &quot;conduct&quot;, &quot;hyperactivity&quot;, &quot;peer&quot;, &quot;prosocial&quot;,  &quot;total&quot;))
+
+eb_SDQ_age17 = pheno_eb[,c(&quot;ID&quot;,&quot;weights&quot;,&quot;sex&quot;, &quot;tc4025a&quot;, &quot;tc4025b&quot;,  &quot;tc4025c&quot;,  &quot;tc4025d&quot;,  &quot;tc4025e&quot;,  &quot;tc4025f&quot;)]
+setnames(eb_SDQ_age17, old = c(&quot;tc4025a&quot;, &quot;tc4025b&quot;,    &quot;tc4025c&quot;,  &quot;tc4025d&quot;,  &quot;tc4025e&quot;,  &quot;tc4025f&quot;), new = c( &quot;emotional&quot;, &quot;conduct&quot;, &quot;hyperactivity&quot;, &quot;peer&quot;, &quot;prosocial&quot;,  &quot;total&quot;))
+
+
+
+eb_data_frames &lt;- list(eb_SDQ_age7, eb_SDQ_age10, eb_SDQ_age12, eb_SDQ_age13, eb_SDQ_age17)
+
+eb_SDQ_age7[eb_SDQ_age7&lt;0]=NA
+eb_SDQ_age10[eb_SDQ_age10&lt;0]=NA
+eb_SDQ_age12[eb_SDQ_age12&lt;0]=NA
+eb_SDQ_age13[eb_SDQ_age13&lt;0]=NA
+eb_SDQ_age17[eb_SDQ_age17&lt;0]=NA
+
+
+eb_merged1 = merge(merged, eb_SDQ_age7, by = &quot;ID&quot;)
+eb_merged2 = merge(merged, eb_SDQ_age10, by = &quot;ID&quot;)
+eb_merged3 = merge(merged, eb_SDQ_age12, by = &quot;ID&quot;)
+eb_merged4 = merge(merged, eb_SDQ_age13, by = &quot;ID&quot;)
+eb_merged5 = merge(merged, eb_SDQ_age17, by = &quot;ID&quot;)
+
+
+eb_merged1$period = 7
+eb_merged2$period = 10
+eb_merged3$period = 12
+eb_merged4$period = 13
+eb_merged5$period = 17
+  
+  
+eb_merged_multilevel = bind_rows(eb_merged1, eb_merged2, eb_merged3, eb_merged4, eb_merged5)
+eb_merged_multilevel$period = as.numeric(as.character(eb_merged_multilevel$period))
+
+eb_lin_agePGS_emo &lt;- lmer(scale(emotional) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = eb_merged_multilevel)
+
+  
+  
+  
+eb_lin_agePGS_con &lt;- lmer(scale(conduct) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = eb_merged_multilevel)
+
+  
+  
+eb_lin_agePGS_hyp &lt;- lmer(scale(hyperactivity) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = eb_merged_multilevel)
+
+  
+  
+  
+  
+eb_lin_agePGS_peer &lt;- lmer(scale(peer) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = eb_merged_multilevel)
+
+  
+  
+  
+  
+  
+eb_lin_agePGS_pro &lt;- lmer(scale(prosocial) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = eb_merged_multilevel)
+
+  
+eb_lin_agePGS_ttl &lt;- lmer(scale(total) ~ scale(over10_PGS)*scale(period) + scale(under11_PGS)*scale(period) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10 + (1 | ID), data = eb_merged_multilevel)
+
+  
+  
+  
+  
+list1 = c(&quot;emotional&quot;, &quot;conduct&quot;, &quot;hyperactivity&quot;, &quot;peer&quot;, &quot;prosocial&quot;, &quot;total&quot;)
+eb_results_over10 = NULL
+eb_results_under11 = NULL
+eb_Samplesize = NULL
+
+for(i in list1){
+  eb_results_all = summary(lm(scale(eb_merged1[[i]]) ~ scale(over10_PGS) + scale(under11_PGS) + sex  + X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = eb_merged1,weights = weights))
+  eb_results_over10 = rbind(eb_results_over10, cbind(i, t(eb_results_all$coefficients[2,])))
+  eb_results_under11 = rbind(eb_results_under11, cbind(i, t(eb_results_all$coefficients[3,])))
+  dim =  nrow(eb_merged1) - length(eb_results_all$na.action)
+  Samplesize = rbind(eb_Samplesize, dim)
+  
+}
+print(eb_results_all)
+  
+  
+  
+  
+  
+for(i in list1){
+  eb_results_all = summary(lm(scale(eb_merged2[[i]]) ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = eb_merged2,weights = weights))
+  eb_results_over10 = rbind(eb_results_over10, cbind(i, t(eb_results_all$coefficients[2,])))
+  eb_results_under11 = rbind(eb_results_under11, cbind(i, t(eb_results_all$coefficients[3,])))
+  dim =  nrow(eb_merged1) - length(eb_results_all$na.action)
+  Samplesize = rbind(eb_Samplesize, dim)
+  
+}
+print(eb_results_all)
+  
+  
+  
+  
+  
+  
+for(i in list1){
+  eb_results_all = summary(lm(scale(eb_merged3[[i]]) ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = eb_merged3,weights = weights))
+  eb_results_over10 = rbind(eb_results_over10, cbind(i, t(eb_results_all$coefficients[2,])))
+  eb_results_under11 = rbind(eb_results_under11, cbind(i, t(eb_results_all$coefficients[3,])))
+  dim =  nrow(eb_merged1) - length(eb_results_all$na.action)
+  Samplesize = rbind(eb_Samplesize, dim)
+  
+}
+print(eb_results_all)
+  
+  
+  
+  
+for(i in list1){
+  eb_results_all = summary(lm(scale(eb_merged4[[i]]) ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = eb_merged4,weights = weights))
+  eb_results_over10 = rbind(eb_results_over10, cbind(i, t(eb_results_all$coefficients[2,])))
+  eb_results_under11 = rbind(eb_results_under11, cbind(i, t(eb_results_all$coefficients[3,])))
+  dim =  nrow(eb_merged1) - length(eb_results_all$na.action)
+  Samplesize = rbind(eb_Samplesize, dim)
+  
+}
+print(eb_results_all)
+  
+  
+  
+  
+  
+  
+for(i in list1){
+  eb_results_all = summary(lm(scale(eb_merged5[[i]]) ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = eb_merged5,weights = weights))
+  eb_results_over10 = rbind(eb_results_over10, cbind(i, t(eb_results_all$coefficients[2,])))
+  eb_results_under11 = rbind(eb_results_under11, cbind(i, t(eb_results_all$coefficients[3,])))
+  dim =  nrow(eb_merged1) - length(eb_results_all$na.action)
+  Samplesize = rbind(eb_Samplesize, dim)
+  
+}
+print(eb_results_all)
+  
+  
+  
+  
+  
+  
+  
+eb_autism = pheno_eb[,c(&quot;ID&quot;,&quot;weights&quot;,&quot;sex&quot;, &quot;YPH1270&quot;, &quot;ku360&quot;,   &quot;ku361&quot;)]
+eb_autism[eb_autism&lt;0]=NA
+
+eb_autism$ku360 =ifelse(eb_autism$ku360 ==1, 0, eb_autism$ku360)
+eb_autism$ku360 =ifelse(eb_autism$ku360 ==2, 1, eb_autism$ku360)
+eb_merged_autism = merge(merged, eb_autism, by = &quot;ID&quot;)
+
+
+eb_results_all = summary(glm(ku360 ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = eb_merged_autism, family = &quot;binomial&quot;,weights = weights))</code></pre>
+<pre><code>## Warning in eval(family$initialize): non-integer #successes in a binomial glm!</code></pre>
+<pre><code>## Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred</code></pre>
+<pre class="r"><code>eb_results_all = summary(lm(YPH1270 ~ scale(over10_PGS) + scale(under11_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = eb_merged_autism,weights = weights))
+
+eb_merged_autism$suspect = ifelse(eb_merged_autism$YPH1270 ==2, 1, NA)
+eb_merged_autism$suspect = ifelse(eb_merged_autism$YPH1270 ==3, 0, eb_merged_autism$suspect)
+
+
+eb_merged_autism$eb_autism_28 = ifelse(eb_merged_autism$YPH1270 ==1, 1, NA)
+eb_merged_autism$eb_autism_28 = ifelse(eb_merged_autism$YPH1270 ==3, 0, eb_merged_autism$eb_autism_28)
+
+
+eb_scdc = pheno_eb[,c(&quot;ID&quot;,&quot;weights&quot;,&quot;sex&quot;,  &quot;kr554b&quot;, &quot;kg622a&quot;, &quot;kg622b&quot;,&quot;kg623a&quot;, &quot;kg623b&quot;, &quot;kl722a&quot;, &quot;kl722b&quot;, &quot;kn6022a&quot;, &quot;kn6022b&quot;, &quot;FKEP1015&quot;, &quot;ku503a&quot;, &quot;ku504a&quot;, &quot;ku505a&quot;, &quot;ku506a&quot;, &quot;ku507a&quot;, &quot;ku508a&quot;, &quot;ku509a&quot;, &quot;ku510a&quot;, &quot;kc814&quot; )]
+eb_scdc[eb_scdc&lt;0]=NA
+
+eb_merged_scdc = merge(merged, eb_scdc, by = &quot;ID&quot;)
+
+summary(lm(scale(kc814) ~ scale(under11_PGS) + scale(over10_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = eb_merged_scdc,weights = weights))
+  
+  
+  
+eb_gesture = pheno_eb[,c(&quot;ID&quot;,&quot;weights&quot;,&quot;sex&quot;,&quot;kc958&quot;, &quot;kc959&quot;,&quot;kc960&quot;, &quot;kc961&quot;, &quot;kc962&quot;, &quot;kc963&quot;, &quot;kc964&quot;, &quot;kc965&quot;, &quot;kc966&quot;, &quot;kc967&quot;)]
+eb_gesture[eb_gesture&lt;0]=NA
+eb_gesture$total = rowSums(eb_gesture[ , c(4:13)], na.rm=TRUE)
+eb_gesture[4:14][eb_gesture[4:14]&lt;1]=NA
+
+
+eb_merged_gesture = merge(merged, eb_gesture, by = &quot;ID&quot;)
+summary(lm(scale(total) ~ scale(under11_PGS) + scale(over10_PGS) + sex +  X1 + X2 + X3 + X4 + X5 + X6 + X7 + X8 + X9 + X10, data = eb_merged_gesture,weights = weights))
+
