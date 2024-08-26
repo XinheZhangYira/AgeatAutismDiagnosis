@@ -1,0 +1,1671 @@
+# Load required packages
+
+library(haven)
+library(tidyr)
+library(tidyverse)
+library(psych)
+library(ggplot2)
+library(lavaan)
+library(data.table)
+library(RColorBrewer)
+library(lcmm)
+
+
+## Load data
+# Baby Cohort (B)
+
+aus_b1 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb0.dta")
+aus_b2 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb2.dta")
+aus_b3 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb4.dta")
+aus_b4 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb6.dta")
+aus_b5 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb8.dta")
+aus_b6 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb10.dta")
+aus_b7 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb12.dta")
+aus_b8 <- read_dta("/Users/General Release/Survey data/STATA/lsacgrb14.dta")
+
+
+# Consistent cases
+
+# make sure participants included in the following analyses participated in every sweep
+aus_consistent_ID <- unique(aus_b8$hicid[aus_b8$hicid%in%aus_b7$hicid[aus_b7$hicid%in% aus_b6$hicid[aus_b6$hicid %in% aus_b5$hicid[aus_b5$hicid %in% aus_b4$hicid [aus_b4$hicid %in% aus_b3$hicid [aus_b3$hicid %in% aus_b2$hicid[aus_b2$hicid %in% aus_b1$hicid]]]]]]])
+
+aus_consistent_b1 <- as.data.frame(aus_b1 %>% filter(hicid %in% aus_consistent_ID)) 
+aus_consistent_b2 <- as.data.frame(aus_b2 %>% filter(hicid %in% aus_consistent_ID))  
+aus_consistent_b3 <- as.data.frame(aus_b3 %>% filter(hicid %in% aus_consistent_ID))  
+aus_consistent_b4 <- as.data.frame(aus_b4 %>% filter(hicid %in% aus_consistent_ID))  
+aus_consistent_b5 <- as.data.frame(aus_b5 %>% filter(hicid %in% aus_consistent_ID))  
+aus_consistent_b6 <- as.data.frame(aus_b6 %>% filter(hicid %in% aus_consistent_ID))  
+aus_consistent_b7 <- as.data.frame(aus_b7 %>% filter(hicid %in% aus_consistent_ID))  
+aus_consistent_b8 <- as.data.frame(aus_b8 %>% filter(hicid %in% aus_consistent_ID))  
+
+
+
+# Extract variables of interest 
+
+aus_b3_rc <- aus_consistent_b3 %>% 
+mutate(across(starts_with("cse03a"),as.numeric)) %>% 
+mutate(across(starts_with("cse03a"), ~ recode(., '1' = 0, '2' = 1, '3' = 2))) %>%
+mutate_at(vars(starts_with("cse03a")), ~ ifelse(. < 0, NA, .))
+
+aus_b4_rc <- aus_consistent_b4 %>% 
+mutate(across(starts_with("dse03a"),as.numeric)) %>% 
+mutate(across(starts_with("dse03a"), ~ recode(., '1' = 0, '2' = 1, '3' = 2)))%>%
+mutate_at(vars(starts_with("dse03a")), ~ ifelse(. < 0, NA, .))
+
+aus_b5_rc <- aus_consistent_b5 %>% 
+mutate(across(starts_with("ese03a"),as.numeric)) %>% 
+mutate(across(starts_with("ese03a"), ~ recode(., '1' = 0, '2' = 1, '3' = 2)))%>%
+mutate_at(vars(starts_with("ese03a")), ~ ifelse(. < 0, NA, .))
+
+aus_b6_rc <- aus_consistent_b6 %>% 
+mutate(across(starts_with("fse03a"),as.numeric)) %>% 
+mutate(across(starts_with("fse03a"), ~ recode(., '1' = 0, '2' = 1, '3' = 2)))%>%
+mutate_at(vars(starts_with("fse03a")), ~ ifelse(. < 0, NA, .))
+
+aus_b7_rc <- aus_consistent_b7 %>% 
+mutate(across(starts_with("gse03a"),as.numeric)) %>% 
+mutate(across(starts_with("gse03a"), ~ recode(., '1' = 0, '2' = 1, '3' = 2)))%>%
+mutate_at(vars(starts_with("gse03a")), ~ ifelse(. < 0, NA, .))
+
+aus_b8_rc <- aus_consistent_b8 %>% 
+mutate(across(starts_with("hse03a"),as.numeric)) %>% 
+mutate(across(starts_with("hse03a"), ~ recode(., '1' = 0, '2' = 1, '3' = 2)))%>%
+mutate_at(vars(starts_with("hse03a")), ~ ifelse(. < 0, NA, .))
+
+ 
+
+
+
+
+aus_b3_sdq <- aus_b3_rc %>%  transmute(hicid,  zf02m1,
+                                                  caemot_sum = rowSums(across(starts_with('cse03a3')), na.rm = F), 
+                                                  cacondb_sum = rowSums(across(starts_with('cse03a4')), na.rm = F), 
+                                                  cahypr_sum = rowSums(across(starts_with('cse03a2')), na.rm = F), 
+                                                  capeer_sum = rowSums(across(starts_with('cse03a5')), na.rm = F), 
+                                                  capsoc_sum = rowSums(across(starts_with('cse03a1')), na.rm = F),
+                                                  b3sdqttl = caemot_sum + cacondb_sum + cahypr_sum + capeer_sum) %>% na.omit
+
+
+
+
+
+aus_b4_autism <- aus_b4_rc %>%  transmute(hicid,  zf02m1,dhs17w,dhs17w2,dhs17w3,dhs17w4,
+                                                  daemot_sum = rowSums(across(starts_with('dse03a3')), na.rm = F), 
+                                                  dacondb_sum = rowSums(across(starts_with('dse03a4')), na.rm = F), 
+                                                  dahypr_sum = rowSums(across(starts_with('dse03a2')), na.rm = F), 
+                                                  dapeer_sum = rowSums(across(starts_with('dse03a5')), na.rm = F), 
+                                                  dapsoc_sum = rowSums(across(starts_with('dse03a1')), na.rm = F),
+                                                  b4sdqttl = daemot_sum + dacondb_sum + dahypr_sum + dapeer_sum) %>% na.omit
+aus_b4_autism$dhs17w4 <- ifelse(aus_b4_autism$dhs17w4 > 7, aus_b4_autism$dhs17w4 %/% 12, aus_b4_autism$dhs17w4)
+
+
+
+
+aus_b5_autism <- aus_b5_rc %>%  transmute(hicid, zf02m1, ehs17w, ehs17w2, ehs17w3, ehs17w4,
+                                                  eaemot_sum = rowSums(across(starts_with('ese03a3')), na.rm = F), 
+                                                  eacondb_sum = rowSums(across(starts_with('ese03a4')), na.rm = F), 
+                                                  eahypr_sum = rowSums(across(starts_with('ese03a2')), na.rm = F), 
+                                                  eapeer_sum = rowSums(across(starts_with('ese03a5')), na.rm = F), 
+                                                  eapsoc_sum = rowSums(across(starts_with('ese03a1')), na.rm = F),
+                                                  b5sdqttl = eaemot_sum + eacondb_sum + eahypr_sum + eapeer_sum) %>% na.omit 
+aus_b5_autism$ehs17w4 <- ifelse(aus_b5_autism$ehs17w4 > 9, aus_b5_autism$ehs17w4 %/% 12, aus_b5_autism$ehs17w4)
+
+  
+
+
+aus_b6_autism <- aus_b6_rc %>%  transmute(hicid,  zf02m1, fhs17w, fhs17w2, fhs17w3, fhs17w4,
+                                                  faemot_sum = rowSums(across(starts_with('fse03a3')), na.rm = F), 
+                                                  facondb_sum = rowSums(across(starts_with('fse03a4')), na.rm = F), 
+                                                  fahypr_sum = rowSums(across(starts_with('fse03a2')), na.rm = F), 
+                                                  fapeer_sum = rowSums(across(starts_with('fse03a5')), na.rm = F), 
+                                                  fapsoc_sum = rowSums(across(starts_with('fse03a1')), na.rm = F),
+                                                  b6sdqttl = faemot_sum + facondb_sum + fahypr_sum + fapeer_sum) %>% na.omit 
+aus_b6_autism$fhs17w4 <- ifelse(aus_b6_autism$fhs17w4 > 11, aus_b6_autism$fhs17w %/% 12, aus_b6_autism$fhs17w4)
+
+
+
+
+aus_b7_autism <- aus_b7_rc %>%  transmute(hicid,  zf02m1, ghs17w, ghs17w2, ghs17w3, ghs17w4,
+                                                  gaemot_sum = rowSums(across(starts_with('gse03a3')), na.rm = F), 
+                                                  gacondb_sum = rowSums(across(starts_with('gse03a4')), na.rm = F), 
+                                                  gahypr_sum = rowSums(across(starts_with('gse03a2')), na.rm = F), 
+                                                  gapeer_sum = rowSums(across(starts_with('gse03a5')), na.rm = F), 
+                                                  gapsoc_sum = rowSums(across(starts_with('gse03a1')), na.rm = F),
+                                                  b7sdqttl = gaemot_sum + gacondb_sum + gahypr_sum + gapeer_sum) %>% na.omit 
+aus_b7_autism$ghs17w4 <- ifelse(aus_b7_autism$ghs17w4 == 13, aus_b7_autism$fhs17w4 %/% 12, aus_b7_autism$ghs17w4)
+
+
+
+
+
+aus_b8_autism <- aus_b8_rc %>%  transmute(hicid,  zf02m1, hhs17w, hhs17w2, hhs17w3, hhs17w4,
+                                                  haemot_sum = rowSums(across(starts_with('hse03a3')), na.rm = F), 
+                                                  hacondb_sum = rowSums(across(starts_with('hse03a4')), na.rm = F), 
+                                                  hahypr_sum = rowSums(across(starts_with('hse03a2')), na.rm = F), 
+                                                  hapeer_sum = rowSums(across(starts_with('hse03a5')), na.rm = F), 
+                                                  hapsoc_sum = rowSums(across(starts_with('hse03a1')), na.rm = F),
+                                                  b8sdqttl = haemot_sum + hacondb_sum + hahypr_sum + hapeer_sum) %>% na.omit 
+
+# recoding diagnosis age, as the original data are values with mixed units (months/years)
+aus_b8_autism$hhs17w4 <- ifelse(aus_b8_autism$hhs17w4 == 15, aus_b8_autism$hhs17w4 %/% 12, aus_b8_autism$hhs17w4)
+
+
+# Create wide data for LGM
+
+
+aus_b_autism_wide <- list(aus_b3_sdq,aus_b4_autism, aus_b5_autism,aus_b6_autism, aus_b7_autism, aus_b8_autism) %>% reduce(full_join, by = c("hicid","zf02m1"))
+
+#aus_b_autism_wide1 <- list(aus_b_autism_wide[,c(1,3,4:9,11:16,22:27,33:38,44:49,55:60,18:21,29:32,40:43,51:54)]) %>% reduce(full_join, by = "hicid")
+
+aus_b_autism_wide <- aus_b_autism_wide[complete.cases(aus_b_autism_wide[3:58]), ]
+
+
+
+
+aus_b_no_autism <- filter(aus_b_autism_wide, hhs17w != 1 & ehs17w != 1 &fhs17w != 1 &ghs17w != 1 & dhs17w !=1)
+aus_b_diag_autism <- filter(aus_b_autism_wide, dhs17w == 1|ehs17w == 1|fhs17w == 1|ghs17w == 1|hhs17w == 1) 
+aus_b_diag_autism <- aus_b_diag_autism %>%
+  mutate_all(~ ifelse(. == -9, NA, .))
+
+
+
+selected_columns <- c("dhs17w","ehs17w", "fhs17w", "ghs17w","hhs17w")  
+aus_b_diag_autism$autism_pattern <- do.call(paste, c(aus_b_diag_autism[selected_columns], sep = "-"))
+find_first_one_position <- function(pattern) {
+  pattern_digits <- unlist(strsplit(pattern, "-"))
+  first_one_position <- which(pattern_digits == "1")[1]
+  return(first_one_position)
+}
+
+aus_b_diag_autism$first_diag <- sapply(aus_b_diag_autism$autism_pattern, find_first_one_position)
+
+
+
+aus_b_diag_autism  <- aus_b_diag_autism %>%
+dplyr::mutate(diag.age =
+case_when(
+    first_diag == "1" ~ 7,
+    first_diag == "2" ~ 9,
+    first_diag == "3" ~ 11,
+    first_diag == "4" ~ 13,
+    first_diag == "5" ~ 15
+    )
+    )
+
+aus_b_autism_early <- filter(aus_b_diag_autism, diag.age <= 9)
+aus_b_autism_late <- filter(aus_b_diag_autism, diag.age > 9)
+
+
+
+aus_b_diag_autism$group <- ifelse(aus_b_diag_autism$hicid %in% aus_b_autism_early$hicid, 1, 2)
+aus_b_no_autism$group <- 3
+aus_b_all <- rbind(aus_b_diag_autism[,c(1:58,62)],aus_b_no_autism)
+
+
+
+# LGCM
+## LGM_total
+# Linear model
+aus_b_sexstr_ttl <- '
+         int.sdq =~  1*b3sdqttl + 1*b4sdqttl + 1*b5sdqttl + 1*b6sdqttl + 1*b7sdqttl + 1*b8sdqttl
+         slp.sdq =~  0*b3sdqttl + 1*b4sdqttl + 2*b5sdqttl + 3*b6sdqttl + 4*b7sdqttl + 5*b8sdqttl
+         
+         '
+aus_b_asd_ttl_fit <- growth(aus_b_sexstr_ttl, data = aus_b_diag_autism, missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+aus_b_agestr_ttl_fit <- growth(aus_b_sexstr_ttl, data = aus_b_diag_autism,
+                               group = "group",missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+aus_b_sexstr_ttl_fit <- growth(aus_b_sexstr_ttl, 
+                           data = aus_b_diag_autism, group = "zf02m1",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+#summary(aus_b_sexstr_ttl_fit)
+ausb_ttl_anova_sex <- anova(aus_b_asd_ttl_fit,aus_b_sexstr_ttl_fit)
+ausb_ttl_anova_age <- anova(aus_b_asd_ttl_fit,aus_b_agestr_ttl_fit)
+ausb_anova_ttl_age_results<- data.frame(ausb_ttl_anova_age)
+ausb_anova_ttl_sex_results<- data.frame(ausb_ttl_anova_sex)
+ausb_anova_ttl <- rbind(ausb_anova_ttl_age_results,ausb_anova_ttl_sex_results)
+ausb_anova_ttl
+
+
+# Quadratic
+
+# Simplest models
+aus_lgm_quadratic <- '
+         int =~  1*b3sdqttl + 1*b4sdqttl + 1*b5sdqttl + 1*b6sdqttl + 1*b7sdqttl + 1*b8sdqttl
+         slp =~  0*b3sdqttl + 1*b4sdqttl + 2*b5sdqttl + 3*b6sdqttl + 4*b7sdqttl + 5*b8sdqttl
+         slp2 =~ 0*b3sdqttl + 1*b4sdqttl + 4*b5sdqttl + 9*b6sdqttl + 16*b7sdqttl + 25*b8sdqttl
+         
+         '
+
+aus_b_quadratic_fit <- growth(aus_lgm_quadratic, 
+                           data = aus_b_all,group = "group",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(aus_b_quadratic_fit)
+
+
+# Pro
+## Linear models
+
+
+aus_b_sexstr_psoc <- '
+        int.psoc =~  1*capsoc_sum + 1*dapsoc_sum + 1*eapsoc_sum + 1*fapsoc_sum + 1*gapsoc_sum + 1*hapsoc_sum
+         slp.psoc =~  0*capsoc_sum + 1*dapsoc_sum + 2*eapsoc_sum + 3*fapsoc_sum + 4*gapsoc_sum + 5*hapsoc_sum
+         '
+
+aus_b_sexstr_psoc_fit <- growth(aus_b_sexstr_psoc, 
+                           data = aus_b_diag_autism, group = "zf02m1",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+#summary(aus_b_sexstr_psoc_fit)
+aus_b_asd_psoc_fit <- growth(aus_b_sexstr_psoc, data = aus_b_diag_autism, missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+aus_b_agestr_psoc_fit <- growth(aus_b_sexstr_psoc, data = aus_b_diag_autism,
+                               group = "group",missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+
+ausb_psoc_anova_sex <- anova(aus_b_asd_psoc_fit,aus_b_sexstr_psoc_fit)
+ausb_psoc_anova_age <- anova(aus_b_asd_psoc_fit,aus_b_agestr_psoc_fit)
+ausb_anova_psoc_age_results<- data.frame(ausb_psoc_anova_age)
+ausb_anova_psoc_sex_results<- data.frame(ausb_psoc_anova_sex)
+ausb_anova_psoc <- rbind(ausb_anova_psoc_age_results,ausb_anova_psoc_sex_results)
+ausb_anova_psoc
+
+
+# Quadratic models
+aus_lgm_psoc_qua <- "
+
+         int.psoc =~  1*capsoc_sum + 1*dapsoc_sum + 1*eapsoc_sum + 1*fapsoc_sum + 1*gapsoc_sum + 1*hapsoc_sum
+         slp.psoc =~  0*capsoc_sum + 1*dapsoc_sum + 2*eapsoc_sum + 3*fapsoc_sum + 4*gapsoc_sum + 5*hapsoc_sum
+         slp.psoc2 =~  0*capsoc_sum + 1*dapsoc_sum + 4*eapsoc_sum + 9*fapsoc_sum + 16*gapsoc_sum + 25*hapsoc_sum
+         "
+
+aus_b_fit_psoc_quad <- growth(aus_lgm_psoc_qua, 
+                           data = aus_b_all,group = "group",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(aus_b_fit_psoc_quad)
+
+
+
+
+# Emotional symptoms
+
+
+## Linear models
+aus_b_sexstr_emot <- '
+        int.emot =~  1*caemot_sum + 1*daemot_sum + 1*eaemot_sum + 1*faemot_sum + 1*gaemot_sum + 1*haemot_sum
+         slp.emot =~  0*caemot_sum + 1*daemot_sum + 2*eaemot_sum + 3*faemot_sum + 4*gaemot_sum + 5*haemot_sum
+         '
+
+aus_b_sexstr_emot_fit <- growth(aus_b_sexstr_emot, 
+                           data = aus_b_diag_autism, group = "zf02m1",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+#summary(aus_b_sexstr_emot_fit)
+aus_b_asd_emot_fit <- growth(aus_b_sexstr_emot, data = aus_b_diag_autism, missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+aus_b_agestr_emot_fit <- growth(aus_b_sexstr_emot, data = aus_b_diag_autism,
+                               group = "group",missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+
+ausb_emot_anova_sex <- anova(aus_b_asd_emot_fit,aus_b_sexstr_emot_fit)
+ausb_emot_anova_age <- anova(aus_b_asd_emot_fit,aus_b_agestr_emot_fit)
+ausb_anova_emot_age_results<- data.frame(ausb_emot_anova_age)
+ausb_anova_emot_sex_results<- data.frame(ausb_emot_anova_sex)
+ausb_anova_emot <- rbind(ausb_anova_emot_age_results,ausb_anova_emot_sex_results)
+ausb_anova_emot
+
+
+
+# Conduct problems
+
+## Linear models
+
+aus_b_sexstr_condb <- '
+        int.condb =~  1*cacondb_sum + 1*dacondb_sum + 1*eacondb_sum + 1*facondb_sum + 1*gacondb_sum + 1*hacondb_sum
+         slp.condb =~  0*cacondb_sum + 1*dacondb_sum + 2*eacondb_sum + 3*facondb_sum + 4*gacondb_sum + 5*hacondb_sum
+         '
+
+aus_b_sexstr_condb_fit <- growth(aus_b_sexstr_condb, 
+                           data = aus_b_diag_autism, group = "zf02m1",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+#summary(aus_b_sexstr_condb_fit)
+aus_b_asd_condb_fit <- growth(aus_b_sexstr_condb, data = aus_b_diag_autism, missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+aus_b_agestr_condb_fit <- growth(aus_b_sexstr_condb, data = aus_b_diag_autism,
+                               group = "group",missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+
+ausb_condb_anova_sex <- anova(aus_b_asd_condb_fit,aus_b_sexstr_condb_fit)
+ausb_condb_anova_age <- anova(aus_b_asd_condb_fit,aus_b_agestr_condb_fit)
+ausb_anova_condb_age_results<- data.frame(ausb_condb_anova_age)
+ausb_anova_condb_sex_results<- data.frame(ausb_condb_anova_sex)
+ausb_anova_condb <- rbind(ausb_anova_condb_age_results,ausb_anova_condb_sex_results)
+ausb_anova_condb
+
+
+
+
+# Hyperactivity/inattention
+## Linear models
+
+
+aus_b_sexstr_hypr <- '
+        int.hypr =~  1*cahypr_sum + 1*dahypr_sum + 1*eahypr_sum + 1*fahypr_sum + 1*gahypr_sum + 1*hahypr_sum
+         slp.hypr =~  0*cahypr_sum + 1*dahypr_sum + 2*eahypr_sum + 3*fahypr_sum + 4*gahypr_sum + 5*hahypr_sum
+         '
+
+aus_b_sexstr_hypr_fit <- growth(aus_b_sexstr_hypr, 
+                           data = aus_b_diag_autism, group = "zf02m1",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+#summary(aus_b_sexstr_hypr_fit)
+aus_b_asd_hypr_fit <- growth(aus_b_sexstr_hypr, data = aus_b_diag_autism, missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+aus_b_agestr_hypr_fit <- growth(aus_b_sexstr_hypr, data = aus_b_diag_autism,
+                               group = "group",missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+
+ausb_hypr_anova_sex <- anova(aus_b_asd_hypr_fit,aus_b_sexstr_hypr_fit)
+ausb_hypr_anova_age <- anova(aus_b_asd_hypr_fit,aus_b_agestr_hypr_fit)
+ausb_anova_hypr_age_results<- data.frame(ausb_hypr_anova_age)
+ausb_anova_hypr_sex_results<- data.frame(ausb_hypr_anova_sex)
+ausb_anova_hypr <- rbind(ausb_anova_hypr_age_results,ausb_anova_hypr_sex_results)
+ausb_anova_hypr
+
+
+# Peer
+
+## Linear models
+
+aus_b_sexstr_peer <- '
+        int.peer =~  1*capeer_sum + 1*dapeer_sum + 1*eapeer_sum + 1*fapeer_sum + 1*gapeer_sum + 1*hapeer_sum
+         slp.peer =~  0*capeer_sum + 1*dapeer_sum + 2*eapeer_sum + 3*fapeer_sum + 4*gapeer_sum + 5*hapeer_sum
+         '
+
+aus_b_sexstr_peer_fit <- growth(aus_b_sexstr_peer, 
+                           data = aus_b_diag_autism, group = "zf02m1",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+#summary(aus_b_sexstr_peer_fit)
+aus_b_asd_peer_fit <- growth(aus_b_sexstr_peer, data = aus_b_diag_autism, missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+aus_b_agestr_peer_fit <- growth(aus_b_sexstr_peer, data = aus_b_diag_autism,
+                               group = "group",missing = "fiml",
+                            estimator = "ml", fixed.x = F)
+
+ausb_peer_anova_sex <- anova(aus_b_asd_peer_fit,aus_b_sexstr_peer_fit)
+ausb_peer_anova_age <- anova(aus_b_asd_peer_fit,aus_b_agestr_peer_fit)
+ausb_anova_peer_age_results<- data.frame(ausb_peer_anova_age)
+ausb_anova_peer_sex_results<- data.frame(ausb_peer_anova_sex)
+ausb_anova_peer <- rbind(ausb_anova_peer_age_results,ausb_anova_peer_sex_results)
+ausb_anova_peer
+
+
+
+
+## Quadratic models -difficulties subscales
+
+
+aus_lgm_emot_qua <- "
+
+         int.emot =~  1*caemot_sum + 1*daemot_sum + 1*eaemot_sum + 1*faemot_sum + 1*gaemot_sum + 1*haemot_sum
+         slp.emot =~  0*caemot_sum + 1*daemot_sum + 2*eaemot_sum + 3*faemot_sum + 4*gaemot_sum + 5*haemot_sum
+         slp.emot2 =~  0*caemot_sum + 1*daemot_sum + 4*eaemot_sum + 9*faemot_sum + 16*gaemot_sum + 25*haemot_sum
+         "
+
+aus_lgm_condb_qua <- "
+
+         int.condb =~  1*cacondb_sum + 1*dacondb_sum + 1*eacondb_sum + 1*facondb_sum + 1*gacondb_sum + 1*hacondb_sum
+         slp.condb =~  0*cacondb_sum + 1*dacondb_sum + 2*eacondb_sum + 3*facondb_sum + 4*gacondb_sum + 5*hacondb_sum
+         slp.condb2 =~  0*cacondb_sum + 1*dacondb_sum + 4*eacondb_sum + 9*facondb_sum + 16*gacondb_sum + 25*hacondb_sum
+         "
+
+aus_lgm_hypr_qua <- "
+
+         int.hypr =~  1*cahypr_sum + 1*dahypr_sum + 1*eahypr_sum + 1*fahypr_sum + 1*gahypr_sum + 1*hahypr_sum
+         slp.hypr =~  0*cahypr_sum + 1*dahypr_sum + 2*eahypr_sum + 3*fahypr_sum + 4*gahypr_sum + 5*hahypr_sum
+         slp.hypr2 =~  0*cahypr_sum + 1*dahypr_sum + 4*eahypr_sum + 9*fahypr_sum + 16*gahypr_sum + 25*hahypr_sum
+         "
+
+aus_lgm_peer_qua <- "
+
+         int.peer =~  1*capeer_sum + 1*dapeer_sum + 1*eapeer_sum + 1*fapeer_sum + 1*gapeer_sum + 1*hapeer_sum
+         slp.peer =~  0*capeer_sum + 1*dapeer_sum + 2*eapeer_sum + 3*fapeer_sum + 4*gapeer_sum + 5*hapeer_sum
+         slp.peer2 =~  0*capeer_sum + 1*dapeer_sum + 4*eapeer_sum + 9*fapeer_sum + 16*gapeer_sum + 25*hapeer_sum
+         "
+
+aus_b_fit_emot_quad <- growth(aus_lgm_emot_qua, 
+                           data = aus_b_all,group = "group",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(aus_b_fit_emot_quad)
+
+aus_b_fit_condb_quad <- growth(aus_lgm_condb_qua, 
+                           data = aus_b_all,group = "group",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(aus_b_fit_condb_quad)
+
+aus_b_fit_hypr_quad <- growth(aus_lgm_hypr_qua, 
+                           data = aus_b_all,group = "group",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(aus_b_fit_hypr_quad)
+
+aus_b_fit_peer_quad <- growth(aus_lgm_peer_qua, 
+                           data = aus_b_all,group = "group",
+                           missing = "fiml",
+                           estimator = "ml", fixed.x = FALSE
+                )
+
+summary(aus_b_fit_peer_quad)
+
+
+
+
+# SDQ mean trajectories
+
+early_aus_b_autism_sdq_ttl <- aus_b_autism_early[,c(1,2,8,18,28,38,48,58)] %>% na.omit()
+colnames(early_aus_b_autism_sdq_ttl)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+early_aus_b_autism_sdq_ttl_long <- melt(setDT(early_aus_b_autism_sdq_ttl), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+early_aus_b_ttl_summary <- early_aus_b_autism_sdq_ttl_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    ttl_mean = mean(value),
+    se = std.error(value)
+  )
+early_aus_b_ttl_summary
+
+early_aus_b_ttl_summary$group <- "early"
+
+early_aus_b_ttl_summary <- early_aus_b_ttl_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+
+late_aus_b_autism_sdq_ttl <- aus_b_autism_late[,c(1,2,8,18,28,38,48,58)] %>% na.omit()
+colnames(late_aus_b_autism_sdq_ttl)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+late_aus_b_autism_sdq_ttl_long <- melt(setDT(late_aus_b_autism_sdq_ttl), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+
+late_aus_b_ttl_summary <- late_aus_b_autism_sdq_ttl_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    ttl_mean = mean(value),
+    se = std.error(value)
+  )
+late_aus_b_ttl_summary
+
+late_aus_b_ttl_summary <- late_aus_b_ttl_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+late_aus_b_ttl_summary$group <- "late"
+
+no_diag_aus_b_sdq_ttl <- aus_b_no_autism[,c(1,2,8,18,28,38,48,58)] %>% na.omit()
+colnames(no_diag_aus_b_sdq_ttl)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+no_diag_aus_b_sdq_ttl_long <- melt(setDT(no_diag_aus_b_sdq_ttl), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+
+no_diag_aus_b_ttl_summary <- no_diag_aus_b_sdq_ttl_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    ttl_mean = mean(value),
+    se = std.error(value)
+  )
+no_diag_aus_b_ttl_summary
+
+no_diag_aus_b_ttl_summary <- no_diag_aus_b_ttl_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+no_diag_aus_b_ttl_summary$group <- "no_diag"
+
+
+
+
+
+
+early_aus_b_ttl_summary$lb = early_aus_b_ttl_summary$ttl_mean - 1.96*early_aus_b_ttl_summary$se
+early_aus_b_ttl_summary$ub = early_aus_b_ttl_summary$ttl_mean + 1.96*early_aus_b_ttl_summary$se
+late_aus_b_ttl_summary$lb = late_aus_b_ttl_summary$ttl_mean - 1.96*late_aus_b_ttl_summary$se
+late_aus_b_ttl_summary$ub = late_aus_b_ttl_summary$ttl_mean + 1.96*late_aus_b_ttl_summary$se
+no_diag_aus_b_ttl_summary$lb = no_diag_aus_b_ttl_summary$ttl_mean - 1.96*no_diag_aus_b_ttl_summary$se
+no_diag_aus_b_ttl_summary$ub = no_diag_aus_b_ttl_summary$ttl_mean + 1.96*no_diag_aus_b_ttl_summary$se
+aus_b_sdq_total_mean_full <- full_join(full_join(early_aus_b_ttl_summary, late_aus_b_ttl_summary),no_diag_aus_b_ttl_summary)
+aus_b_sdq_total_mean_full
+
+# emotional problems
+
+# To draw the graph, using only complete entries
+
+early_aus_b_autism_sdq_emot_sum <- aus_b_autism_early[,c(1,2,3,13,23,33,43,53)] %>% na.omit()
+colnames(early_aus_b_autism_sdq_emot_sum)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+early_aus_b_autism_sdq_emot_sum_long <- melt(setDT(early_aus_b_autism_sdq_emot_sum), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+early_aus_b_emot_sum_summary <- early_aus_b_autism_sdq_emot_sum_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    emot_sum_mean = mean(value), se = std.error(value)
+  )
+early_aus_b_emot_sum_summary
+
+early_aus_b_emot_sum_summary$group <- "early"
+
+early_aus_b_emot_sum_summary <- early_aus_b_emot_sum_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+
+late_aus_b_autism_sdq_emot_sum <- aus_b_autism_late[,c(1,2,3,13,23,33,43,53)] %>% na.omit()
+colnames(late_aus_b_autism_sdq_emot_sum)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+late_aus_b_autism_sdq_emot_sum_long <- melt(setDT(late_aus_b_autism_sdq_emot_sum), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+
+late_aus_b_emot_sum_summary <- late_aus_b_autism_sdq_emot_sum_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    emot_sum_mean = mean(value), se = std.error(value)
+  )
+late_aus_b_emot_sum_summary
+
+late_aus_b_emot_sum_summary <- late_aus_b_emot_sum_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+late_aus_b_emot_sum_summary$group <- "late"
+
+no_diag_aus_b_sdq_emot_sum <- aus_b_no_autism[,c(1,2,3,13,23,33,43,53)] %>% na.omit()
+colnames(no_diag_aus_b_sdq_emot_sum)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+no_diag_aus_b_sdq_emot_sum_long <- melt(setDT(no_diag_aus_b_sdq_emot_sum), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+
+no_diag_aus_b_emot_sum_summary <- no_diag_aus_b_sdq_emot_sum_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    emot_sum_mean = mean(value), se = std.error(value)
+  )
+no_diag_aus_b_emot_sum_summary
+
+no_diag_aus_b_emot_sum_summary <- no_diag_aus_b_emot_sum_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+no_diag_aus_b_emot_sum_summary$group <- "no_diag"
+
+
+
+
+
+
+
+early_aus_b_emot_sum_summary$lb = early_aus_b_emot_sum_summary$emot_sum_mean - 1.96*early_aus_b_emot_sum_summary$se
+early_aus_b_emot_sum_summary$ub = early_aus_b_emot_sum_summary$emot_sum_mean + 1.96*early_aus_b_emot_sum_summary$se
+late_aus_b_emot_sum_summary$lb = late_aus_b_emot_sum_summary$emot_sum_mean - 1.96*late_aus_b_emot_sum_summary$se
+late_aus_b_emot_sum_summary$ub = late_aus_b_emot_sum_summary$emot_sum_mean + 1.96*late_aus_b_emot_sum_summary$se
+no_diag_aus_b_emot_sum_summary$lb = no_diag_aus_b_emot_sum_summary$emot_sum_mean - 1.96*no_diag_aus_b_emot_sum_summary$se
+no_diag_aus_b_emot_sum_summary$ub = no_diag_aus_b_emot_sum_summary$emot_sum_mean + 1.96*no_diag_aus_b_emot_sum_summary$se
+aus_b_sdq_emo_mean_full <- full_join(full_join(early_aus_b_emot_sum_summary, late_aus_b_emot_sum_summary),no_diag_aus_b_emot_sum_summary)
+aus_b_sdq_emo_mean_full
+
+
+
+# Conduct problems
+
+# To draw the graph, using only complete entries
+early_aus_b_autism_sdq_con <- aus_b_autism_early[,c(1,2,4,14,24,34,44,54)] %>% na.omit()
+colnames(early_aus_b_autism_sdq_con)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+early_aus_b_autism_sdq_con_long <- melt(setDT(early_aus_b_autism_sdq_con), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+early_aus_b_con_summary <- early_aus_b_autism_sdq_con_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    con_mean = mean(value), se = std.error(value)
+  )
+early_aus_b_con_summary
+
+early_aus_b_con_summary$group <- "early"
+
+early_aus_b_con_summary <- early_aus_b_con_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+
+late_aus_b_autism_sdq_con <- aus_b_autism_late[,c(1,2,4,14,24,34,44,54)] %>% na.omit()
+colnames(late_aus_b_autism_sdq_con)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+late_aus_b_autism_sdq_con_long <- melt(setDT(late_aus_b_autism_sdq_con), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+
+late_aus_b_con_summary <- late_aus_b_autism_sdq_con_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    con_mean = mean(value), se = std.error(value)
+  )
+late_aus_b_con_summary
+
+late_aus_b_con_summary <- late_aus_b_con_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+late_aus_b_con_summary$group <- "late"
+
+no_diag_aus_b_sdq_con <- aus_b_no_autism[,c(1,2,4,14,24,34,44,54)] %>% na.omit()
+colnames(no_diag_aus_b_sdq_con)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+no_diag_aus_b_sdq_con_long <- melt(setDT(no_diag_aus_b_sdq_con), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+
+no_diag_aus_b_con_summary <- no_diag_aus_b_sdq_con_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    con_mean = mean(value), se = std.error(value)
+  )
+no_diag_aus_b_con_summary
+
+no_diag_aus_b_con_summary <- no_diag_aus_b_con_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+no_diag_aus_b_con_summary$group <- "no_diag"
+
+
+
+
+
+
+
+early_aus_b_con_summary$lb = early_aus_b_con_summary$con_mean - 1.96*early_aus_b_con_summary$se
+early_aus_b_con_summary$ub = early_aus_b_con_summary$con_mean + 1.96*early_aus_b_con_summary$se
+late_aus_b_con_summary$lb = late_aus_b_con_summary$con_mean - 1.96*late_aus_b_con_summary$se
+late_aus_b_con_summary$ub = late_aus_b_con_summary$con_mean + 1.96*late_aus_b_con_summary$se
+no_diag_aus_b_con_summary$lb = no_diag_aus_b_con_summary$con_mean - 1.96*no_diag_aus_b_con_summary$se
+no_diag_aus_b_con_summary$ub = no_diag_aus_b_con_summary$con_mean + 1.96*no_diag_aus_b_con_summary$se
+aus_b_sdq_con_mean_full <- full_join(full_join(early_aus_b_con_summary, late_aus_b_con_summary),no_diag_aus_b_con_summary)
+aus_b_sdq_con_mean_full
+
+
+
+# Hyperactivity
+
+early_aus_b_autism_sdq_hyp <- aus_b_autism_early[,c(1,2,5,15,25,35,45,55)] %>% na.omit()
+colnames(early_aus_b_autism_sdq_hyp)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+early_aus_b_autism_sdq_hyp_long <- melt(setDT(early_aus_b_autism_sdq_hyp), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+early_aus_b_hyp_summary <- early_aus_b_autism_sdq_hyp_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    hyp_mean = mean(value), se = std.error(value)
+  )
+early_aus_b_hyp_summary
+
+early_aus_b_hyp_summary$group <- "early"
+
+early_aus_b_hyp_summary <- early_aus_b_hyp_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+
+late_aus_b_autism_sdq_hyp <- aus_b_autism_late[,c(1,2,5,15,25,35,45,55)] %>% na.omit()
+colnames(late_aus_b_autism_sdq_hyp)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+late_aus_b_autism_sdq_hyp_long <- melt(setDT(late_aus_b_autism_sdq_hyp), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+
+late_aus_b_hyp_summary <- late_aus_b_autism_sdq_hyp_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    hyp_mean = mean(value), se = std.error(value)
+  )
+late_aus_b_hyp_summary
+
+late_aus_b_hyp_summary <- late_aus_b_hyp_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+late_aus_b_hyp_summary$group <- "late"
+
+no_diag_aus_b_sdq_hyp <- aus_b_no_autism[,c(1,2,5,15,25,35,45,55)] %>% na.omit()
+colnames(no_diag_aus_b_sdq_hyp)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+no_diag_aus_b_sdq_hyp_long <- melt(setDT(no_diag_aus_b_sdq_hyp), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+
+no_diag_aus_b_hyp_summary <- no_diag_aus_b_sdq_hyp_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    hyp_mean = mean(value), se = std.error(value)
+  )
+no_diag_aus_b_hyp_summary
+
+no_diag_aus_b_hyp_summary <- no_diag_aus_b_hyp_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+no_diag_aus_b_hyp_summary$group <- "no_diag"
+
+
+
+
+
+
+
+early_aus_b_hyp_summary$lb = early_aus_b_hyp_summary$hyp_mean - 1.96*early_aus_b_hyp_summary$se
+early_aus_b_hyp_summary$ub = early_aus_b_hyp_summary$hyp_mean + 1.96*early_aus_b_hyp_summary$se
+late_aus_b_hyp_summary$lb = late_aus_b_hyp_summary$hyp_mean - 1.96*late_aus_b_hyp_summary$se
+late_aus_b_hyp_summary$ub = late_aus_b_hyp_summary$hyp_mean + 1.96*late_aus_b_hyp_summary$se
+no_diag_aus_b_hyp_summary$lb = no_diag_aus_b_hyp_summary$hyp_mean - 1.96*no_diag_aus_b_hyp_summary$se
+no_diag_aus_b_hyp_summary$ub = no_diag_aus_b_hyp_summary$hyp_mean + 1.96*no_diag_aus_b_hyp_summary$se
+aus_b_sdq_hyp_mean_full <- full_join(full_join(early_aus_b_hyp_summary, late_aus_b_hyp_summary),no_diag_aus_b_hyp_summary)
+aus_b_sdq_hyp_mean_full
+
+
+# Peer relationship problems
+
+# To draw the graph, using only complete entries
+
+early_aus_b_autism_sdq_peer <- aus_b_autism_early[,c(1,2,6,16,26,36,46,56)] %>% na.omit()
+colnames(early_aus_b_autism_sdq_peer)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+early_aus_b_autism_sdq_peer_long <- melt(setDT(early_aus_b_autism_sdq_peer), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+early_aus_b_peer_summary <- early_aus_b_autism_sdq_peer_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    peer_mean = mean(value), se = std.error(value)
+  )
+early_aus_b_peer_summary
+
+early_aus_b_peer_summary$group <- "early"
+
+early_aus_b_peer_summary <- early_aus_b_peer_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+
+late_aus_b_autism_sdq_peer <- aus_b_autism_late[,c(1,2,6,16,26,36,46,56)] %>% na.omit()
+colnames(late_aus_b_autism_sdq_peer)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+late_aus_b_autism_sdq_peer_long <- melt(setDT(late_aus_b_autism_sdq_peer), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+
+late_aus_b_peer_summary <- late_aus_b_autism_sdq_peer_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    peer_mean = mean(value), se = std.error(value)
+  )
+late_aus_b_peer_summary
+
+late_aus_b_peer_summary <- late_aus_b_peer_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+late_aus_b_peer_summary$group <- "late"
+
+no_diag_aus_b_sdq_peer <- aus_b_no_autism[,c(1,2,6,16,26,36,46,56)] %>% na.omit()
+colnames(no_diag_aus_b_sdq_peer)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+no_diag_aus_b_sdq_peer_long <- melt(setDT(no_diag_aus_b_sdq_peer), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+
+no_diag_aus_b_peer_summary <- no_diag_aus_b_sdq_peer_long %>%
+  group_by(sweep) %>%
+  summarise(
+    sd = sd(value),
+    peer_mean = mean(value), se = std.error(value)
+  )
+no_diag_aus_b_peer_summary
+
+no_diag_aus_b_peer_summary <- no_diag_aus_b_peer_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+no_diag_aus_b_peer_summary$group <- "no_diag"
+
+
+
+
+
+
+
+early_aus_b_peer_summary$lb = early_aus_b_peer_summary$peer_mean - 1.96*early_aus_b_peer_summary$se
+early_aus_b_peer_summary$ub = early_aus_b_peer_summary$peer_mean + 1.96*early_aus_b_peer_summary$se
+late_aus_b_peer_summary$lb = late_aus_b_peer_summary$peer_mean - 1.96*late_aus_b_peer_summary$se
+late_aus_b_peer_summary$ub = late_aus_b_peer_summary$peer_mean + 1.96*late_aus_b_peer_summary$se
+no_diag_aus_b_peer_summary$lb = no_diag_aus_b_peer_summary$peer_mean - 1.96*no_diag_aus_b_peer_summary$se
+no_diag_aus_b_peer_summary$ub = no_diag_aus_b_peer_summary$peer_mean + 1.96*no_diag_aus_b_peer_summary$se
+aus_b_sdq_peer_mean_full <- full_join(full_join(early_aus_b_peer_summary, late_aus_b_peer_summary),no_diag_aus_b_peer_summary)
+aus_b_sdq_peer_mean_full
+
+
+
+# psoc problems
+
+early_aus_b_autism_sdq_psoc <- aus_b_autism_early[,c(1,2,7,17,27,37,47,57)] %>% na.omit
+colnames(early_aus_b_autism_sdq_psoc)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+early_aus_b_autism_sdq_psoc_long <- melt(setDT(early_aus_b_autism_sdq_psoc), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+early_aus_b_psoc_summary <- early_aus_b_autism_sdq_psoc_long %>%
+  filter(complete.cases(.)) %>%
+  group_by(sweep) %>%
+ dplyr::summarise(
+    sd = sd(value),
+    psoc_mean = mean(value), se = std.error(value)
+  )
+early_aus_b_psoc_summary
+
+early_aus_b_psoc_summary$group <- "early"
+
+early_aus_b_psoc_summary <- early_aus_b_psoc_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+
+late_aus_b_autism_sdq_psoc <- aus_b_autism_late[,c(1,2,7,17,27,37,47,57)] %>% na.omit()
+colnames(late_aus_b_autism_sdq_psoc)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+late_aus_b_autism_sdq_psoc_long <- melt(setDT(late_aus_b_autism_sdq_psoc), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+
+late_aus_b_psoc_summary <- late_aus_b_autism_sdq_psoc_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value),
+    psoc_mean = mean(value), se = std.error(value)
+  )
+late_aus_b_psoc_summary
+
+late_aus_b_psoc_summary <- late_aus_b_psoc_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+late_aus_b_psoc_summary$group <- "late"
+
+
+no_diag_aus_b_sdq_psoc <- aus_b_no_autism[,c(1,2,7,17,27,37,47,57)] %>% na.omit
+colnames(no_diag_aus_b_sdq_psoc)[3:8] <- c("b3","b4","b5","b6","b7","b8")
+no_diag_aus_b_sdq_psoc_long <- melt(setDT(no_diag_aus_b_sdq_psoc), id.vars = c("hicid","zf02m1"), variable.name = "sweep")
+
+no_diag_aus_b_psoc_summary <- no_diag_aus_b_sdq_psoc_long %>%
+  dplyr::group_by(sweep) %>%
+  dplyr::summarise(
+    sd = sd(value),
+    psoc_mean = mean(value), se = std.error(value)
+  )
+no_diag_aus_b_psoc_summary
+
+no_diag_aus_b_psoc_summary <- no_diag_aus_b_psoc_summary %>%
+  mutate(Age = case_when(
+    sweep == "b3" ~ 5,
+    sweep == "b4" ~ 7,
+    sweep == "b5" ~ 9,
+    sweep == "b6" ~ 11,
+    sweep == "b7" ~ 13,
+    sweep == "b8" ~ 15)
+    )
+no_diag_aus_b_psoc_summary$group <- "no_diag"
+
+
+
+
+
+
+early_aus_b_psoc_summary$lb = early_aus_b_psoc_summary$psoc_mean - 1.96*early_aus_b_psoc_summary$se
+early_aus_b_psoc_summary$ub = early_aus_b_psoc_summary$psoc_mean + 1.96*early_aus_b_psoc_summary$se
+late_aus_b_psoc_summary$lb = late_aus_b_psoc_summary$psoc_mean - 1.96*late_aus_b_psoc_summary$se
+late_aus_b_psoc_summary$ub = late_aus_b_psoc_summary$psoc_mean + 1.96*late_aus_b_psoc_summary$se
+no_diag_aus_b_psoc_summary$lb = no_diag_aus_b_psoc_summary$psoc_mean - 1.96*no_diag_aus_b_psoc_summary$se
+no_diag_aus_b_psoc_summary$ub = no_diag_aus_b_psoc_summary$psoc_mean + 1.96*no_diag_aus_b_psoc_summary$se
+aus_b_sdq_psoc_mean_full <- full_join(full_join(early_aus_b_psoc_summary, late_aus_b_psoc_summary),no_diag_aus_b_psoc_summary)
+aus_b_sdq_psoc_mean_full
+
+====================================================
+## GMM on diagnosed autistic children 
+
+
+library(data.table)
+library(lcmm)
+aus_b_diag_autism <- dplyr::mutate(aus_b_diag_autism, numericID = row_number())
+aus_diag_autism_wide_sdq_total <- aus_b_diag_autism[,c("numericID","hicid","zf02m1","diag.age","b3sdqttl","b4sdqttl","b5sdqttl","b6sdqttl","b7sdqttl","b8sdqttl")] %>% na.omit
+aus_diag_autism_long_sdq_total <- melt(setDT(aus_diag_autism_wide_sdq_total), id.vars = c("numericID","hicid","zf02m1","diag.age"), variable.name = "sweep")
+
+aus_diag_autism_long_sdq_total <- aus_diag_autism_long_sdq_total %>%
+  mutate(Sweep = case_when(
+    sweep == "b3sdqttl" ~ 3,
+    sweep == "b4sdqttl" ~ 4,
+    sweep == "b5sdqttl" ~ 5,
+    sweep == "b6sdqttl" ~ 6,
+    sweep == "b7sdqttl" ~ 7,
+    sweep == "b8sdqttl" ~ 8)
+    )
+
+
+# emot
+
+
+aus_diag_autism_wide_sdq_emot <- aus_b_diag_autism[,c("numericID","hicid","zf02m1","diag.age","caemot_sum","daemot_sum","eaemot_sum","faemot_sum","gaemot_sum","haemot_sum")] %>% na.omit
+
+aus_diag_autism_long_sdq_emot <- melt(setDT(aus_diag_autism_wide_sdq_emot), id.vars = c("numericID","hicid","zf02m1","diag.age"), variable.name = "sweep") %>% na.omit
+
+aus_diag_autism_long_sdq_emot <- aus_diag_autism_long_sdq_emot %>%
+  mutate(Sweep = case_when(
+    sweep == "caemot_sum" ~ 3,
+    sweep == "daemot_sum" ~ 4,
+    sweep == "eaemot_sum" ~ 5,
+    sweep == "faemot_sum" ~ 6,
+    sweep == "gaemot_sum" ~ 7,
+    sweep == "haemot_sum" ~ 8)
+    )
+
+# condb
+
+
+aus_diag_autism_wide_sdq_condb <- aus_b_diag_autism[,c("numericID","hicid","zf02m1","diag.age","cacondb_sum","dacondb_sum","eacondb_sum","facondb_sum","gacondb_sum","hacondb_sum")] %>% na.omit
+
+aus_diag_autism_long_sdq_condb <- melt(setDT(aus_diag_autism_wide_sdq_condb), id.vars = c("numericID","hicid","zf02m1","diag.age"), variable.name = "sweep") %>% na.omit
+
+aus_diag_autism_long_sdq_condb <- aus_diag_autism_long_sdq_condb %>%
+  mutate(Sweep = case_when(
+    sweep == "cacondb_sum" ~ 3,
+    sweep == "dacondb_sum" ~ 4,
+    sweep == "eacondb_sum" ~ 5,
+    sweep == "facondb_sum" ~ 6,
+    sweep == "gacondb_sum" ~ 7,
+    sweep == "hacondb_sum" ~ 8)
+    )
+
+
+# hypr
+
+
+
+aus_diag_autism_wide_sdq_hypr <- aus_b_diag_autism[,c("numericID","hicid","zf02m1","diag.age","cahypr_sum","dahypr_sum","eahypr_sum","fahypr_sum","gahypr_sum","hahypr_sum")] %>% na.omit
+
+aus_diag_autism_long_sdq_hypr <- melt(setDT(aus_diag_autism_wide_sdq_hypr), id.vars = c("numericID","hicid","zf02m1","diag.age"), variable.name = "sweep") %>% na.omit
+
+aus_diag_autism_long_sdq_hypr <- aus_diag_autism_long_sdq_hypr %>%
+  mutate(Sweep = case_when(
+    sweep == "cahypr_sum" ~ 3,
+    sweep == "dahypr_sum" ~ 4,
+    sweep == "eahypr_sum" ~ 5,
+    sweep == "fahypr_sum" ~ 6,
+    sweep == "gahypr_sum" ~ 7,
+    sweep == "hahypr_sum" ~ 8)
+    )
+
+# peer
+
+
+aus_diag_autism_wide_sdq_peer <- aus_b_diag_autism[,c("numericID","hicid","zf02m1","diag.age","capeer_sum","dapeer_sum","eapeer_sum","fapeer_sum","gapeer_sum","hapeer_sum")] %>% na.omit
+
+aus_diag_autism_long_sdq_peer <- melt(setDT(aus_diag_autism_wide_sdq_peer), id.vars = c("numericID","hicid","zf02m1","diag.age"), variable.name = "sweep") %>% na.omit
+
+aus_diag_autism_long_sdq_peer <- aus_diag_autism_long_sdq_peer %>%
+  mutate(Sweep = case_when(
+    sweep == "capeer_sum" ~ 3,
+    sweep == "dapeer_sum" ~ 4,
+    sweep == "eapeer_sum" ~ 5,
+    sweep == "fapeer_sum" ~ 6,
+    sweep == "gapeer_sum" ~ 7,
+    sweep == "hapeer_sum" ~ 8)
+    )
+
+# psoc
+
+
+aus_diag_autism_wide_sdq_psoc <- aus_b_diag_autism[,c("numericID","hicid","zf02m1","diag.age","capsoc_sum","dapsoc_sum","eapsoc_sum","fapsoc_sum","gapsoc_sum","hapsoc_sum")] %>% na.omit
+
+aus_diag_autism_long_sdq_psoc <- melt(setDT(aus_diag_autism_wide_sdq_psoc), id.vars = c("numericID","hicid","zf02m1","diag.age"), variable.name = "sweep") %>% na.omit
+
+aus_diag_autism_long_sdq_psoc <- aus_diag_autism_long_sdq_psoc %>%
+  mutate(Sweep = case_when(
+    sweep == "capsoc_sum" ~ 3,
+    sweep == "dapsoc_sum" ~ 4,
+    sweep == "eapsoc_sum" ~ 5,
+    sweep == "fapsoc_sum" ~ 6,
+    sweep == "gapsoc_sum" ~ 7,
+    sweep == "hapsoc_sum" ~ 8)
+    )
+
+# SDQ total
+
+
+aus_diag_ttl_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+aus_diag_autism_long_sdq_total)
+summary(aus_diag_ttl_gmm1)
+
+
+aus_diag_ttl_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = aus_diag_autism_long_sdq_total, mixture = ~ Sweep,
+nwg=T, B = aus_diag_ttl_gmm1)
+summary(aus_diag_ttl_gmm2)
+
+
+aus_diag_ttl_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = aus_diag_autism_long_sdq_total, mixture = ~ Sweep, 
+nwg=T, B = aus_diag_ttl_gmm1)
+summary(aus_diag_ttl_gmm3)
+
+aus_diag_ttl_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 4, data = aus_diag_autism_long_sdq_total, mixture = ~ Sweep, nwg=T, B = aus_diag_ttl_gmm1)
+summary(aus_diag_ttl_gmm4)
+
+# make a table with results for the models:
+fit_ind_aus_b_ttl <- summarytable(aus_diag_ttl_gmm1,aus_diag_ttl_gmm2, aus_diag_ttl_gmm3,aus_diag_ttl_gmm4, which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+age <- c("5","7","9","11","13","15")
+#aus_diag_autism_long_sdq_total$numericID <- as.character(aus_diag_autism_long_sdq_total$numericID)
+aus_diag_ttl_people2 <- as.data.frame(aus_diag_ttl_gmm2$pprob[,1:2])
+
+aus_diag_ttl_gmm2 <- full_join(aus_diag_autism_long_sdq_total, aus_diag_ttl_people2, by = "numericID")
+aus_diag_ttl_gmm2$numericID <- as.character(aus_diag_ttl_gmm2$numericID)
+aus_diag_ttl_gmm2$class <- as.factor(aus_diag_ttl_gmm2$class)
+
+
+
+
+
+# Emot 
+
+
+aus_diag_emot_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+aus_diag_autism_long_sdq_emot)
+#summary(aus_diag_emot_gmm1)
+
+
+aus_diag_emot_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = aus_diag_autism_long_sdq_emot, mixture = ~ Sweep,
+nwg=T, B = aus_diag_emot_gmm1)
+#summary(aus_diag_emot_gmm2)
+
+
+aus_diag_emot_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = aus_diag_autism_long_sdq_emot, mixture = ~ Sweep, 
+nwg=T, B = aus_diag_emot_gmm1)
+#summary(aus_diag_emot_gmm3)
+
+aus_diag_emot_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = aus_diag_autism_long_sdq_emot, mixture = ~ Sweep, 
+nwg=T, B = aus_diag_emot_gmm1)
+#summary(aus_diag_emot_gmm4)
+
+fit_ind_aus_b_emot <- summarytable(aus_diag_emot_gmm1, aus_diag_emot_gmm2, aus_diag_emot_gmm3, aus_diag_emot_gmm4,which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+
+
+
+age <- c("5","7","9","11","13","15")
+#aus_diag_autism_long_sdq_emot$numericID <- as.character(aus_diag_autism_long_sdq_emot$numericID)
+aus_diag_emot_people2 <- as.data.frame(aus_diag_emot_gmm2$pprob[,1:2])
+
+aus_diag_autism_long_sdq_emot_gmm2 <- full_join(aus_diag_autism_long_sdq_emot, aus_diag_emot_people2, by = "numericID")
+aus_diag_autism_long_sdq_emot_gmm2$numericID <- as.character(aus_diag_autism_long_sdq_emot_gmm2$numericID)
+aus_diag_autism_long_sdq_emot_gmm2$class <- as.factor(aus_diag_autism_long_sdq_emot_gmm2$class)
+
+
+{r, eval = FALSE}
+age <- c("5","7","9","11","13","15")
+aus_diag_emot_people3 <- as.data.frame(aus_diag_emot_gmm3$pprob[,1:2])
+
+aus_diag_autism_long_sdq_emot_gmm3 <- full_join(aus_diag_autism_long_sdq_emot, aus_diag_emot_people3, by = "numericID")
+aus_diag_autism_long_sdq_emot_gmm3$numericID <- as.character(aus_diag_autism_long_sdq_emot_gmm3$numericID)
+aus_diag_autism_long_sdq_emot_gmm3$class <- as.factor(aus_diag_autism_long_sdq_emot_gmm3$class)
+
+
+
+# Condb
+
+
+aus_diag_condb_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+aus_diag_autism_long_sdq_condb)
+#summary(aus_diag_condb_gmm1)
+
+
+aus_diag_condb_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = aus_diag_autism_long_sdq_condb, mixture = ~ Sweep,
+nwg=T, B = aus_diag_condb_gmm1)
+#summary(aus_diag_condb_gmm2)
+
+
+aus_diag_condb_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = aus_diag_autism_long_sdq_condb, mixture = ~ Sweep, 
+nwg=T, B = aus_diag_condb_gmm1)
+#summary(aus_diag_condb_gmm3)
+
+aus_diag_condb_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = aus_diag_autism_long_sdq_condb, mixture = ~ Sweep, 
+nwg=T, B = aus_diag_condb_gmm1)
+#summary(aus_diag_condb_gmm4)
+
+
+fit_ind_aus_b_condb <- summarytable(aus_diag_condb_gmm1, aus_diag_condb_gmm2, aus_diag_condb_gmm3, aus_diag_condb_gmm4,which =  c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+
+
+age <- c("5","7","9","11","13","15")
+#aus_diag_autism_long_sdq_condb$numericID <- as.character(aus_diag_autism_long_sdq_condb$numericID)
+aus_diag_condb_people2 <- as.data.frame(aus_diag_condb_gmm2$pprob[,1:2])
+
+aus_diag_autism_long_sdq_condb_gmm2 <- full_join(aus_diag_autism_long_sdq_condb, aus_diag_condb_people2, by = "numericID")
+aus_diag_autism_long_sdq_condb_gmm2$numericID <- as.character(aus_diag_autism_long_sdq_condb_gmm2$numericID)
+aus_diag_autism_long_sdq_condb_gmm2$class <- as.factor(aus_diag_autism_long_sdq_condb_gmm2$class)
+# aus_diag_autism_long_sdq_condb$group_aus_diag_condb_gmm2_s <- factor(aus_diag_condb_people2$class[unlist(sapply(aus_diag_autism_long_sdq_condb$numericID, function(x) which(aus_diag_condb_people2$numeircID==x)))])
+
+
+
+# Hypr
+
+
+
+aus_diag_hypr_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+aus_diag_autism_long_sdq_hypr)
+#summary(aus_diag_hypr_gmm1)
+
+
+aus_diag_hypr_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = aus_diag_autism_long_sdq_hypr, mixture = ~ Sweep,
+nwg=T, B = aus_diag_hypr_gmm1)
+#summary(aus_diag_hypr_gmm2)
+
+
+aus_diag_hypr_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = aus_diag_autism_long_sdq_hypr, mixture = ~ Sweep, 
+nwg=T, B = aus_diag_hypr_gmm1)
+#summary(aus_diag_hypr_gmm3)
+
+aus_diag_hypr_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = aus_diag_autism_long_sdq_hypr, mixture = ~ Sweep, 
+nwg=T, B = aus_diag_hypr_gmm1)
+#summary(aus_diag_hypr_gmm4)
+
+# make a table with results for the 3 models:
+fit_ind_aus_b_hypr <- summarytable(aus_diag_hypr_gmm1, aus_diag_hypr_gmm2, aus_diag_hypr_gmm3, aus_diag_hypr_gmm4, which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+
+
+
+age <- c("5","7","9","11","13","15")
+#aus_diag_autism_long_sdq_hypr$numericID <- as.character(aus_diag_autism_long_sdq_hypr$numericID)
+aus_diag_hypr_people2 <- as.data.frame(aus_diag_hypr_gmm2$pprob[,1:2])
+
+aus_diag_autism_long_sdq_hypr_gmm2 <- full_join(aus_diag_autism_long_sdq_hypr, aus_diag_hypr_people2, by = "numericID")
+aus_diag_autism_long_sdq_hypr_gmm2$numericID <- as.character(aus_diag_autism_long_sdq_hypr_gmm2$numericID)
+aus_diag_autism_long_sdq_hypr_gmm2$class <- as.factor(aus_diag_autism_long_sdq_hypr_gmm2$class)
+# aus_diag_autism_long_sdq_hypr$group_aus_diag_hypr_gmm2_s <- factor(aus_diag_hypr_people2$class[unlist(sapply(aus_diag_autism_long_sdq_hypr$numericID, function(x) which(aus_diag_hypr_people2$numeircID==x)))])
+
+
+
+# Peer
+
+aus_diag_peer_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+aus_diag_autism_long_sdq_peer)
+#summary(aus_diag_peer_gmm1)
+
+
+aus_diag_peer_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = aus_diag_autism_long_sdq_peer, mixture = ~ Sweep,
+nwg=T, B = aus_diag_peer_gmm1)
+#summary(aus_diag_peer_gmm2)
+
+
+aus_diag_peer_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = aus_diag_autism_long_sdq_peer, mixture = ~ Sweep, 
+nwg=T, B = aus_diag_peer_gmm1)
+#summary(aus_diag_peer_gmm3)
+
+aus_diag_peer_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = aus_diag_autism_long_sdq_peer, mixture = ~ Sweep, 
+nwg=T, B = aus_diag_peer_gmm1)
+#summary(aus_diag_peer_gmm4)
+
+# make a table with results for the 3 models:
+fit_ind_aus_b_peer <- summarytable(aus_diag_peer_gmm1, aus_diag_peer_gmm2, aus_diag_peer_gmm3, aus_diag_peer_gmm4, which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+
+
+
+age <- c("5","7","9","11","13","15")
+#aus_diag_autism_long_sdq_peer$numericID <- as.character(aus_diag_autism_long_sdq_peer$numericID)
+aus_diag_peer_people2 <- as.data.frame(aus_diag_peer_gmm2$pprob[,1:2])
+
+aus_diag_autism_long_sdq_peer_gmm2 <- full_join(aus_diag_autism_long_sdq_peer, aus_diag_peer_people2, by = "numericID")
+aus_diag_autism_long_sdq_peer_gmm2$numericID <- as.character(aus_diag_autism_long_sdq_peer_gmm2$numericID)
+aus_diag_autism_long_sdq_peer_gmm2$class <- as.factor(aus_diag_autism_long_sdq_peer_gmm2$class)
+# aus_diag_autism_long_sdq_peer$group_aus_diag_peer_gmm2_s <- factor(aus_diag_peer_people2$class[unlist(sapply(aus_diag_autism_long_sdq_peer$numericID, function(x) which(aus_diag_peer_people2$numeircID==x)))])
+
+
+# psoc
+
+
+aus_diag_psoc_gmm1 <- hlme(value ~ Sweep, subject = "numericID", random=~1, ng = 1, data =
+aus_diag_autism_long_sdq_psoc)
+#summary(aus_diag_psoc_gmm1)
+
+
+aus_diag_psoc_gmm2 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 2, data = aus_diag_autism_long_sdq_psoc, mixture = ~ Sweep,
+nwg=T, B = aus_diag_psoc_gmm1)
+#summary(aus_diag_psoc_gmm2)
+
+
+aus_diag_psoc_gmm3 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 3, data = aus_diag_autism_long_sdq_psoc, mixture = ~ Sweep, 
+nwg=T, B = aus_diag_psoc_gmm1)
+#summary(aus_diag_psoc_gmm3)
+
+aus_diag_psoc_gmm4 <- hlme(value ~ Sweep, subject = "numericID", random=~1,
+ng = 4, data = aus_diag_autism_long_sdq_psoc, mixture = ~ Sweep, 
+nwg=T, B = aus_diag_psoc_gmm1)
+#summary(aus_diag_psoc_gmm4)
+
+# make a table with results for the 3 models:
+fit_ind_aus_b_psoc <- summarytable(aus_diag_psoc_gmm1, aus_diag_psoc_gmm2, aus_diag_psoc_gmm3, aus_diag_psoc_gmm4, which = c("AIC","BIC","SABIC","%class","entropy","npm","loglik"))
+
+
+
+age <- c("5","7","9","11","13","15")
+#aus_diag_autism_long_sdq_psoc$numericID <- as.character(aus_diag_autism_long_sdq_psoc$numericID)
+aus_diag_psoc_people2 <- as.data.frame(aus_diag_psoc_gmm2$pprob[,1:2])
+
+aus_diag_autism_long_sdq_psoc_gmm2 <- full_join(aus_diag_autism_long_sdq_psoc, aus_diag_psoc_people2, by = "numericID")
+aus_diag_autism_long_sdq_psoc_gmm2$numericID <- as.character(aus_diag_autism_long_sdq_psoc_gmm2$numericID)
+aus_diag_autism_long_sdq_psoc_gmm2$class <- as.factor(aus_diag_autism_long_sdq_psoc_gmm2$class)
+aus_diag_autism_long_sdq_psoc$group_aus_diag_psoc_gmm2_s <- factor(aus_diag_psoc_people2$class[unlist(sapply(aus_diag_autism_long_sdq_psoc$numericID, function(x) which(aus_diag_psoc_people2$numeircID==x)))])
+
+
+
+
+
+## Multiple regression with sociodemographic factors
+
+
+aus_b_gmm_grp <- cbind(aus_diag_ttl_gmm2,aus_diag_autism_long_sdq_emot_gmm2,aus_diag_autism_long_sdq_condb_gmm2,aus_diag_autism_long_sdq_hypr_gmm2,aus_diag_autism_long_sdq_peer_gmm2,aus_diag_autism_long_sdq_psoc_gmm2) 
+aus_b_gmm_grp <- aus_b_gmm_grp[,c(1,2,3,4,8,16,24,32,40,48)]
+colnames(aus_b_gmm_grp) <- c("numericID","hicid","sex","diag.age","ttl","emot","condb","hypr","peer","psoc")
+aus_b_gmm_grp <- aus_b_gmm_grp %>% unique()
+aus_b_fit_all <- merge(aus_b_autism_tip, aus_b_gmm_grp,by = "hicid") %>% distinct()
+grp_table_ttl <- table(aus_b_gmm_grp$diag.age,aus_b_gmm_grp$ttl)
+grp_table_emo <- table(aus_b_gmm_grp$diag.age,aus_b_gmm_grp$emot)
+grp_table_con <- table(aus_b_gmm_grp$diag.age,aus_b_gmm_grp$condb)
+grp_table_hyp <- table(aus_b_gmm_grp$diag.age,aus_b_gmm_grp$hypr)
+grp_table_peer <- table(aus_b_gmm_grp$diag.age,aus_b_gmm_grp$peer)
+grp_table_pro <- table(aus_b_gmm_grp$diag.age,aus_b_gmm_grp$psoc)
+
+grp_table <- rbind(grp_table_ttl, grp_table_emo,grp_table_con,grp_table_hyp, grp_table_peer, grp_table_pro)
+write.csv(grp_table, file = "/Users/aus_b_gmm_grp.csv")
+write.csv(aus_b_gmm_grp, file = "/Users/ausb_gmm_grp_membership.csv")
+
+
+# regression model
+
+names(aus_b_gmm_tip)[60] <- "maternal_age"
+names(aus_b_gmm_tip)[61] <- "SES"
+aus_b_fit_all <- lm(diag.age ~ sex + eth + maternal_age + SES  + ttl + emot + condb + hypr + peer + psoc, data= aus_b_gmm_tip)
+summary(aus_b_fit_all)
+tab_model(aus_b_fit_all)
+
+
+
+# Multilevel mediation
+
+
+# Create the mediation model
+
+aus_b_gmm_tip <- aus_b_gmm_tip %>% mutate_at(c('ttl', 'emot','condb','hypr','peer','psoc'), as.numeric)
+names(aus_b_gmm_tip)[names(aus_b_gmm_tip) == "zf02m1"] <- "sex"
+aus_model_1 <- "diag.age ~ sex  + eth + maternal_age + SES  + ttl + emot + condb + hypr + peer + psoc"
+aus_fit_1 <- lavaan::sem(aus_model_1, data = aus_b_gmm_tip)
+ausb_fit.cor <- lavInspect(aus_fit_1, what = "cor.all")
+misty::dominance.manual(ausb_fit.cor)
+
+
+
+
+
+aus_model_2 <- "
+  # direct effects
+  diag.age ~ s*sex  + e*eth + m*maternal_age + se*SES  + t*ttl + em*emot + c*condb + h*hypr + p*peer + pr*psoc
+  # mediation paths
+  
+  ttl ~    se1*SES +  m1*maternal_age  + s1*sex + e1*eth
+  emot ~   se2*SES +  m2*maternal_age  + s2*sex + e2*eth
+  condb ~  se3*SES +  m3*maternal_age  + s3*sex + e3*eth
+  hypr ~   se4*SES +  m4*maternal_age  + s4*sex + e4*eth
+  peer ~   se5*SES +  m5*maternal_age  + s5*sex + e5*eth
+  psoc ~   se6*SES +  m6*maternal_age  + s6*sex + e6*eth
+  
+ indirect_ttl := se1*t + m1*t + s1*t + e1*t
+ indirect_emot := se2*em + m2*em +s2*em+ e2*em
+ indirect_condb := se3*c + m3*c + s3*c+ e3*c
+ indirect_hypr := se4*h+ m4*h +s4*h+ e4*h
+ indirect_peer := se5*p + m5*p +s5*p+ e5*p
+ indirect_psoc := se6*pr + m6*pr +s6*pr+ e6*pr
+ 
+direct := s + e + m + se 
+total_indirect := indirect_ttl + indirect_emot + indirect_condb + indirect_hypr + indirect_peer + indirect_psoc
+total := direct + total_indirect
+"
+set.seed(060524)
+aus_fit_2 <- lavaan::sem(aus_model_2, data = aus_b_gmm_tip,se = "bootstrap", missing = "fiml", bootstrap = 1000)
+aus_fit_2_sum <- lavaan::summary(aus_fit_2, standardized = TRUE, rsq = T,fit = TRUE, ci = TRUE, nd = 7) 
+aus_fit_2_sum
+# Get parameter estimates with specified formatting
+aus_fit_2_est <- lavaan::parameterEstimates(
+  aus_fit_2,
+  boot.ci.type = "bca.simple",
+  standardized = TRUE,
+  rsq = T
+)
+
+# Display the formatted parameter estimates
+print(aus_fit_2_est)
+
+write.csv(aus_fit_2_est, file = "/Users/b_fit_2.csv")
+
+
+==========================================================================
+
+
+## Mental health conditions
+
+aus_b14_MH <- aus_b8 %>% dplyr::filter(hicid %in% aus_b_diag_autism$hicid) %>% dplyr::select(hicid,zf02m1,hhs19b20,hhs17v2,hhs17v1,hsmfq,hsmfqc,hhs37a22a,hhs37a22b,hhs54a,hhs54b,hhs54c,hhs54d,hhs54e)
+aus_b14_MH <- aus_b14_MH %>%
+  mutate_all(~ replace(., . < 0, NA))
+
+aus_b14_MH <- aus_b14_MH %>% mutate_at(vars(c("hhs54a ","hhs54b","hhs54c","hhs54d")),~(replace(., . == 2, 0)))
+
+ausb_MH <- merge(aus_b14_MH,aus_b_gmm_tip, by = c("hicid"), all.y = T )
+
+
+ausb_anxiety <- ausb_MH %>% 
+  group_by(ttl, zf02m1,hhs17v1)%>%
+  dplyr::summarize(count = n())
+ausb_anxiety
+
+
+ausb_depression <- ausb_MH %>% 
+  group_by(ttl, zf02m1,hhs17v2)%>%
+  dplyr::summarize(count = n())
+ausb_depression
+
+
+ausb_smfq_count <- ausb_MH[!is.na(ausb_MH$hsmfq), ] %>% 
+  group_by(ttl, zf02m1)%>%
+  dplyr::summarize(count = n())
+ausb_smfq_count
+
+
+ausb_smfq_cutoff <- ausb_MH[!is.na(ausb_MH$hsmfqc), ] %>% 
+  group_by(ttl, zf02m1,hsmfqc)%>%
+  dplyr::summarize(count = n())
+ausb_smfq_cutoff
+ausb_smfq <- ausb_MH %>%
+  dplyr::group_by(ttl,zf02m1) %>%
+  dplyr::summarize(
+    smf_Median = median(hsmfq, na.rm = TRUE),
+    smf_Q1 = quantile(hsmfq, probs = 0.25, na.rm = TRUE),
+    smf_Q3 = quantile(hsmfq, probs = 0.75, na.rm = TRUE)
+  )  
+ausb_smfq
+
+ausb_smfq_grp <- ausb_MH %>%
+  dplyr::group_by(ttl) %>%
+  dplyr::summarize(
+    smf_Median = median(hsmfq, na.rm = TRUE),
+    smf_Q1 = quantile(hsmfq, probs = 0.25, na.rm = TRUE),
+    smf_Q3 = quantile(hsmfq, probs = 0.75, na.rm = TRUE)
+  )  
+ausb_smfq_grp
+
+ausb_smfq_sex <- ausb_MH %>%
+  dplyr::group_by(zf02m1) %>%
+  dplyr::summarize(
+    smf_Median = median(hsmfq, na.rm = TRUE),
+    smf_Q1 = quantile(hsmfq, probs = 0.25, na.rm = TRUE),
+    smf_Q3 = quantile(hsmfq, probs = 0.75, na.rm = TRUE)
+  )  
+ausb_smfq_sex
+
+ausb_smfq_ova <- ausb_MH %>%
+  dplyr::summarize(
+    smf_Median = median(hsmfq, na.rm = TRUE),
+    smf_Q1 = quantile(hsmfq, probs = 0.25, na.rm = TRUE),
+    smf_Q3 = quantile(hsmfq, probs = 0.75, na.rm = TRUE)
+  )  
+ausb_smfq_ova
+
+
+
+## logistic regressions
+
+ausb_anx_mod <- glm(hhs17v1 ~ ttl + zf02m1, data = ausb_MH, family = binomial)
+ausb_anx_modsum <- broom::tidy(ausb_anx_mod)
+ausb_anx_mod_int <- glm(hhs17v1 ~ ttl + zf02m1 + ttl:zf02m1, data = ausb_MH, family = binomial)
+ausb_anx_mod_intsum <- broom::tidy(ausb_anx_mod_int)
+ausb_depre_mod <- glm(hhs17v2 ~ ttl +zf02m1, data = ausb_MH, family = binomial)
+ausb_depre_modsum <- broom::tidy(ausb_depre_mod)
+
+ausb_depre_mod_int <- glm(hhs17v2 ~ ttl +zf02m1+ ttl:zf02m1, data = ausb_MH, family = binomial)
+
+ausb_depre_mod_intsum <- broom::tidy(ausb_depre_mod_int)
+
+
+ausb_smfq_model_poisson <- glm(hsmfq ~ ttl + zf02m1, family = poisson, data = ausb_MH)
+ausb_smfq_model_poissonsum <- broom::tidy(ausb_smfq_model_poisson)
+ausb_smfq_model_poisson_int <- glm(hsmfq ~ ttl + zf02m1 + ttl:zf02m1, family = poisson, data = ausb_MH)
+ausb_smfq_model_poisson_intsum <- broom::tidy(ausb_smfq_model_poisson_int)
+
+ausb_mod_summary <- rbind(ausb_anx_modsum,ausb_anx_mod_intsum,ausb_depre_modsum,ausb_depre_mod_intsum,ausb_smfq_model_poissonsum,ausb_smfq_model_poisson_intsum)
+ausb_mod_summary
+
+
+
+smf.diff <- wilcox.test(hsmfq ~ ttl, data = ausb_MH)
+smf.diff
+
+smf.diff.sex <- wilcox.test(hsmfq ~ zf02m1, data = ausb_MH)
+smf.diff.sex
+
+smf.diff.sex.1 <- wilcox.test(hsmfq ~ zf02m1, data = ausb_MH[ausb_MH$ttl == 1,])
+smf.diff.sex.1
+
+smf.diff.sex.2 <- wilcox.test(hsmfq ~ zf02m1, data = ausb_MH[ausb_MH$ttl == 2,])
+smf.diff.sex.2
+
+smf.diff.male <- wilcox.test(hsmfq ~ ttl, data = ausb_MH[ausb_MH$zf02m1 == 1,])
+smf.diff.male
+smf.diff.female <- wilcox.test(hsmfq ~ ttl, data = ausb_MH[ausb_MH$zf02m1 == 2,])
+smf.diff.female
+
+
+
+
+
+## self-harm and suicide
+
+ausb_harmthought <- ausb_MH %>% 
+  group_by(ttl, zf02m1,hhs54a)%>%
+  dplyr::summarize(count = n())
+ausb_harmthought
+
+ausb_harmact <- ausb_MH %>% 
+  group_by(ttl, zf02m1,hhs54b)%>%
+  dplyr::summarize(count = n())
+ausb_harmact
+
+ausb_suic_ide<- ausb_MH %>% 
+  group_by(ttl, zf02m1,hhs54c)%>%
+  dplyr::summarize(count = n())
+ausb_suic_ide
+
+
+ausb_suic_plan <- ausb_MH %>% 
+  group_by(ttl, zf02m1,hhs54d)%>%
+  dplyr::summarize(count = n())
+ausb_suic_plan
+
+ausb_MH$sui_attempt <- ifelse(ausb_MH$hhs54e > 0, 1, ausb_MH$hhs54e)
+ausb_suic_attempt <- ausb_MH %>% 
+  group_by(ttl, zf02m1,sui_attempt)%>%
+  dplyr::summarize(count = n())
+ausb_suic_attempt
+
+
+
+
+
+# self-harm, suicidal regression
+
+ausb_MH$self_harm_thought <- ifelse(ausb_MH$hhs54a == 2,0,ausb_MH$hhs54a)
+ausb_harmthought_mod <- glm(self_harm_thought ~ ttl + zf02m1, data = ausb_MH, family = binomial)
+ausb_harmthought_modsum <- broom::tidy(ausb_harmthought_mod)
+ausb_harmthought_mod_int <- glm(self_harm_thought ~ ttl + zf02m1 + ttl:zf02m1, data = ausb_MH, family = binomial)
+ausb_harmthought_mod_intsum <- broom::tidy(ausb_harmthought_mod_int)
+
+
+ausb_harmact_mod <- glm(hhs54b ~ ttl + zf02m1, data = ausb_MH, family = binomial)
+ausb_harmact_modsum <- broom::tidy(ausb_harmact_mod)
+ausb_harmact_mod_int <- glm(hhs54b ~ ttl + zf02m1 + ttl:zf02m1, data = ausb_MH, family = binomial)
+ausb_harmact_mod_intsum <- broom::tidy(ausb_harmact_mod_int)
+
+ausb_suic_ide_mod <- glm(hhs54c ~ ttl + zf02m1, data = ausb_MH, family = binomial)
+ausb_suic_ide_modsum <- broom::tidy(ausb_suic_ide_mod)
+ausb_suic_ide_mod_int <- glm(hhs54c ~ ttl + zf02m1 + ttl:zf02m1, data = ausb_MH, family = binomial)
+ausb_suic_ide_mod_intsum <- broom::tidy(ausb_suic_ide_mod_int)
+
+ausb_suic_plan_mod <- glm(hhs54d ~ ttl + zf02m1, data = ausb_MH, family = binomial)
+ausb_suic_plan_modsum <- broom::tidy(ausb_suic_plan_mod)
+ausb_suic_plan_mod_int <- glm(hhs54d ~ ttl + zf02m1 + ttl:zf02m1, data = ausb_MH, family = binomial)
+ausb_suic_plan_mod_intsum <- broom::tidy(ausb_suic_plan_mod_int)
+
+ausb_suic_attempt_mod <- glm(sui_attempt ~ ttl + zf02m1, data = ausb_MH, family = binomial)
+ausb_suic_attempt_modsum <- broom::tidy(ausb_suic_attempt_mod)
+ausb_suic_attempt_mod_int <- glm(sui_attempt ~ ttl + zf02m1 + ttl:zf02m1, data = ausb_MH, family = binomial)
+ausb_suic_attempt_mod_intsum <- broom::tidy(ausb_suic_attempt_mod_int)
+
+ausb_harmsuic_mod_summary <- rbind(ausb_harmthought_modsum,ausb_harmthought_mod_intsum,ausb_harmact_modsum,ausb_harmact_mod_intsum,ausb_suic_ide_modsum,ausb_suic_ide_mod_intsum,ausb_suic_plan_modsum,ausb_suic_plan_mod_intsum,ausb_suic_attempt_modsum,ausb_suic_attempt_mod_intsum)
+ausb_harmsuic_mod_summary
+
