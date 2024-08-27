@@ -32,20 +32,21 @@ Each folder includes scripts for:
 - Latent Growth Curve Modelling (LGCM) to analyse developmental trajectories
 - Growth Mixture Modelling (GMM) for identifying latent trajectories
 - Mediation analysis using GMM-identified groups (from the optimal model)
+- Group comparison analysis on mental health outcomes
 
-## Installation
 
-To run the analyses, you need to have R installed along with the packages specified at the beginning of each file.
+
 
 
 ## Usage
+To run the analyses, you need to have R installed along with the packages specified at the beginning of each file. And you would need corresponding data, or if you are using a different cohort not used in this study, please make sure your data is in the same format/structure for analyses to run correctly.
 
 To get started with the analyses, you can explore the following folders and scripts:
 
 1. **MCS** 
    - If you are interested in detailed, step-by-step analysis scripts, start here. Each type of analysis is separated into its own script, for example:
      - `MCS_LGCM.Rmd`: Performs Latent Growth Curve Modelling to examine developmental trajectories.
-     - `MCS ADHD LGCM GMM.Rmd`: Conducts Latent Growth Curve Modelling within the ADHD only sample.
+     - `MCS ADHD LGCM GMM.Rmd`: Conducts Growth Mixture Modelling within the ADHD only sample.
      - All files are autistic children focused anlaysis unless specified in the title.
 
 2. **LSAC**
