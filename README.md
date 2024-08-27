@@ -15,7 +15,7 @@ For a detailed explanation of the research, see our manuscript on medRxiv:
 The analyses are based on data from birth cohorts in three countries:
 - **MCS (UK)**: Millennium Cohort Study, with detailed sociodemographic variables and a larger sample of autistic children.
 - **GUI (Ireland)**: Growing up in Ireland (98'), providing comparative insights.
-- **LSAC (Australia)**: Longitudinal Study of Australian CHildren, data from two cohorts (Baby and Kindergarten) in Australia, allowing for a broad analysis across different age groups.
+- **LSAC (Australia)**: Longitudinal Study of Australian Children, data from two cohorts (Baby and Kindergarten) in Australia, allowing for a broad analysis across different age groups.
 
 The study investigates the developmental trajectories of autistic children and the influence of sociodemographic factors on the age at diagnosis.
 
